@@ -121,7 +121,7 @@ void printDebug()
 
 void initialize()
 {
-    P1.numColors=1;
+    P1.numColors=3;
     P2.numColors=P1.numColors;
 
     //setRandomSeed(getTime(0));
@@ -299,7 +299,6 @@ void handleInputs(Player* player, u16 buttons)
         player->spriteY+=TILESIZE;
 
     }
-
 }
 
 void printBoard()
@@ -502,6 +501,7 @@ void printBoard()
     u32 tile[8];
     u16 leftside,rightside;
     u8 tileIncrementer=0;
+    u8 sectionAdd;
 
     for(u8 innerConnectorRow=1;innerConnectorRow<maxX;innerConnectorRow+=2)
     {
@@ -513,30 +513,24 @@ void printBoard()
                 {
                     for (u8 yDraw=0;yDraw<4;yDraw++)
                     {
-                        if(section==0)//upper half
-                        {
-                            if(P1.board[innerConnectorRow][innerConnectorColumn-1]==1)leftside=allred;
-                            else if(P1.board[innerConnectorRow][innerConnectorColumn-1]==2)leftside=allyel;
-                            else if(P1.board[innerConnectorRow][innerConnectorColumn-1]==3)leftside=allgrn;
-                            else leftside=allblank;
+                        if(section==0)sectionAdd=1;//upper half
+                        else sectionAdd=0;//lower half
 
-                            if(P1.board[innerConnectorRow+1][innerConnectorColumn-1]==1)rightside=allred;
-                            else if(P1.board[innerConnectorRow+1][innerConnectorColumn-1]==2)rightside=allyel;
-                            else if(P1.board[innerConnectorRow+1][innerConnectorColumn-1]==3)rightside=allgrn;
-                            else rightside=allblank;
-                        }
-                        else if(section!=0)//lower half
-                        {
-                            if(P1.board[innerConnectorRow][innerConnectorColumn]==1)leftside=allred;
-                            else if(P1.board[innerConnectorRow][innerConnectorColumn]==2)leftside=allyel;
-                            else if(P1.board[innerConnectorRow][innerConnectorColumn]==3)leftside=allgrn;
-                            else leftside=allblank;
+                        if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==1)leftside=allred;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==2)leftside=allyel;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==3)leftside=allgrn;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==4)leftside=allblu;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==5)leftside=allprp;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==6)leftside=allgbg;
+                        else leftside=allblank;
 
-                            if(P1.board[innerConnectorRow+1][innerConnectorColumn]==1)rightside=allred;
-                            else if(P1.board[innerConnectorRow+1][innerConnectorColumn]==2)rightside=allyel;
-                            else if(P1.board[innerConnectorRow+1][innerConnectorColumn]==3)rightside=allgrn;
-                            else rightside=allblank;
-                        }   
+                        if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==1)rightside=allred;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==2)rightside=allyel;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==3)rightside=allgrn;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==4)rightside=allblu;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==5)rightside=allprp;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==6)rightside=allgbg;
+                        else rightside=allblank;
 
                         tile[yDraw+section]=(leftside<<16)+rightside;
                     }
@@ -548,5 +542,4 @@ void printBoard()
             tileIncrementer++;
         }
     }
-
 }

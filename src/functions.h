@@ -143,21 +143,15 @@ void loadDebugFieldData()
 */
 }
 
-
 void drawTile(u8 xPos, u8 yPos)//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
 {
     u8 colorAdd=0;//4 tiles for each color. so color 2 is adding 4, color 3 is adding 8
-    
-    if(P1.board[xPos][yPos]>1)//if we are drawing a tile other than color 1, we need to increase the tile index
-    {
-        colorAdd=P1.board[xPos][yPos]-1;
-        colorAdd=colorAdd<<2;//multiply by 4
-    }
 
-    u8 drawingxPos=xPos;
-    u8 drawingyPos=yPos;
-    drawingxPos+=xPos>>1;
-    drawingyPos+=yPos>>1;
+    //if we are drawing a tile other than color 1, we need to increase the tile index    
+    if(P1.board[xPos][yPos]>1)colorAdd=(P1.board[xPos][yPos]-1)<<2;//multiply by 4
+
+    u8 drawingxPos=xPos+(xPos>>1);
+    u8 drawingyPos=yPos+(yPos>>1);
 
     if(xPos%2!=0 && yPos%2!=0)//odd column, odd row (1,1)
     {
