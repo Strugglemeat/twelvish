@@ -9,7 +9,7 @@ void drawFallingSprite(Player* player);
 void createPiece(Player* player);
 void manageFalling(Player* player);
 void pieceIntoBoard(Player* player);
-void handleInputs(Player* player, u16 buttons);
+void handleInput(Player* player, u16 buttons);
 bool collisionTest(Player* player, u8 direction);
 
 int main()
@@ -53,8 +53,8 @@ int main()
         if(P1.flag_status==needPiece)createPiece(&P1);
         if(P2.flag_status==needPiece)createPiece(&P2);
 
-        handleInputs(&P1, JOY_readJoypad(JOY_1));
-        handleInputs(&P2, JOY_readJoypad(JOY_2));
+        handleInput(&P1, JOY_readJoypad(JOY_1));
+        handleInput(&P2, JOY_readJoypad(JOY_2));
 
 
         if(collisionTest(&P1, BOTTOM)==false){}
@@ -68,23 +68,10 @@ int main()
 
         SYS_doVBlankProcess();
         
-        //printBoard();
-
         if(P1.flag_status==redraw)
         {
             printBoard();
             P1.flag_status=nothing;
-
-/*
-            for(u8 xDraw=1;xDraw<maxX+1;xDraw++)
-            {
-                for(u8 yDraw=8;yDraw<maxY+1;yDraw++)
-                {//if(P1.board[xDraw][yDraw]!=0)drawTile(xDraw,yDraw);
-                    sprintf(debug_string,"%d", P1.board[xDraw][yDraw]);
-                    VDP_drawText(debug_string,xDraw+1,yDraw+6);
-                }
-            }
-*/
         }
 
         drawFallingSprite(&P1);
@@ -115,7 +102,7 @@ void printDebug()
     if(P1.flag_status==toppedOut)
     {
         sprintf(debug_string,"P1 topped out");
-        VDP_drawText(debug_string,4,2);
+        VDP_drawText(debug_string,5,2);
     }
 }
 
@@ -197,86 +184,28 @@ void pieceIntoBoard(Player* player)
 
 bool collisionTest(Player* player, u8 direction)
 {
-    //u8 xCheck=0,yCheck=0;
-
     if(direction==LEFT)
-    {/*
-        for(xCheck=0;xCheck<=1;xCheck++)
-        {
-            for (yCheck=0;yCheck<=2;yCheck++)
-            {
-                //if(newPiece[xCheck][yCheck]!=EMPTY_BLOCK && board[currentX+xCheck-1][currentY+yCheck]!=EMPTY_BLOCK)return true;
-            }
-        }
-        */
+    {
+        if(player->board[player->xPosition-1][player->yPosition+1]!=0)return true;
         if(player->xPosition <= 1)return true;
     }
 
     if(direction==RIGHT)
-    {/*
-        for(xCheck=2;xCheck>=1;xCheck--)
-        {
-            for (yCheck=0;yCheck<=2;yCheck++)
-            {
-                //if(newPiece[xCheck][yCheck]!=EMPTY_BLOCK && board[currentX+xCheck+1][currentY+yCheck]!=EMPTY_BLOCK)return true;
-            }
-        }
-        */
+    {
+        if(player->board[player->xPosition+1][player->yPosition+1]!=0)return true;
         if(player->xPosition >= maxX)return true;
     }
     
     if(direction==BOTTOM)
-    {/*
-            for(xCheck=0;xCheck<=2;xCheck++)
-            {
-                for (yCheck=1;yCheck<=2;yCheck++)//u8 yCheck=0
-                {
-                    //if(newPiece[xCheck][yCheck]!=EMPTY_BLOCK && board[currentX+xCheck][currentY+yCheck+1]!=EMPTY_BLOCK && currentY>0)return true;
-                }
-            }
-
-            //if(newPiece[0][0]!=EMPTY_BLOCK && board[currentX][currentY+1]!=EMPTY_BLOCK && currentY>0)return true;
-        */
+    {
         if(player->yPosition >= maxY) return true;
-
         if(player->board[player->xPosition][player->yPosition+1]!=0) return true;
     }
-/*
-    if(direction==ROTATE)
-    {
-        if(newPiece[2][2]!=EMPTY_BLOCK && board[currentX+0][currentY+2]!=EMPTY_BLOCK)return true;//bot right
 
-        if(newPiece[0][0]!=EMPTY_BLOCK && board[currentX+2][currentY+0]!=EMPTY_BLOCK)return true;//top left
-        if(newPiece[1][0]!=EMPTY_BLOCK && board[currentX+2][currentY+1]!=EMPTY_BLOCK)return true;//top mid
-        if(newPiece[2][0]!=EMPTY_BLOCK && board[currentX+2][currentY+2]!=EMPTY_BLOCK)return true;//top right
-
-        if(newPiece[0][1]!=EMPTY_BLOCK && board[currentX+1][currentY+0]!=EMPTY_BLOCK)return true;//mid left
-        if(newPiece[2][1]!=EMPTY_BLOCK && board[currentX+1][currentY+2]!=EMPTY_BLOCK)return true;//mid right
-
-        if(newPiece[0][2]!=EMPTY_BLOCK && board[currentX+0][currentY+0]!=EMPTY_BLOCK)return true;//bot left
-        if(newPiece[1][2]!=EMPTY_BLOCK && board[currentX+0][currentY+1]!=EMPTY_BLOCK)return true;//bot mid
-        
-    }
-    
-    if(direction==ROTATECCW)
-    {
-        if(newPiece[0][2]!=EMPTY_BLOCK && board[currentX+2][currentY+2]!=EMPTY_BLOCK)return true;//bot left
-        
-        if(newPiece[0][0]!=EMPTY_BLOCK && board[currentX+0][currentY+2]!=EMPTY_BLOCK)return true;//top left
-        if(newPiece[1][0]!=EMPTY_BLOCK && board[currentX+0][currentY+1]!=EMPTY_BLOCK)return true;//top mid
-        if(newPiece[2][0]!=EMPTY_BLOCK && board[currentX+0][currentY+0]!=EMPTY_BLOCK)return true;//top right
-
-        if(newPiece[0][1]!=EMPTY_BLOCK && board[currentX+1][currentY+2]!=EMPTY_BLOCK)return true;//mid left
-        if(newPiece[2][1]!=EMPTY_BLOCK && board[currentX+1][currentY+0]!=EMPTY_BLOCK)return true;//mid right
-
-        if(newPiece[1][2]!=EMPTY_BLOCK && board[currentX+2][currentY+1]!=EMPTY_BLOCK)return true;//bot mid
-        if(newPiece[2][2]!=EMPTY_BLOCK && board[currentX+2][currentY+0]!=EMPTY_BLOCK)return true;//bot right
-    }
-*/
     return false;
 }
 
-void handleInputs(Player* player, u16 buttons)
+void handleInput(Player* player, u16 buttons)
 {
     if(buttons & BUTTON_LEFT && player->moveDelay==0 && collisionTest(player, LEFT)==FALSE)
     {
@@ -297,7 +226,6 @@ void handleInputs(Player* player, u16 buttons)
         player->yPosition++;
         player->fallDelay=FALL_DELAY_AMOUNT;
         player->spriteY+=TILESIZE;
-
     }
 }
 
@@ -315,8 +243,6 @@ void printBoard()
     u8 i;
 
 //updown
-    drawPosX=0,drawPosY=0;
-
     for (u8 updownX=1;updownX<maxX+1;updownX++)
     {
         for (u8 updownY=2;updownY<maxY;updownY+=2)
@@ -331,7 +257,6 @@ void printBoard()
                 //VDP_drawText(debug_string,34,1+yDrawAdd);
 
                 drawPosX=xOffset+updownX+((updownX)>>1);
-                //drawPosY=yOffset+updownY+yDrawAdd;
                 drawPosY=yOffset+updownY+((updownY)>>1);
 
                 switch(P1.updown[updownX][i])//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
@@ -397,7 +322,8 @@ void printBoard()
                     break;
                 }
                 
-                i++;
+            i++;
+            
             }
         }
     }
@@ -483,7 +409,8 @@ void printBoard()
                     break;
                 }
             
-                i++;
+            i++;
+            
             }
         }
     }
