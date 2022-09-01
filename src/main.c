@@ -3,9 +3,6 @@
 #include <functions.h>
 
 void printDebug();
-void loadDebugFieldData();
-void initialize();
-void drawFallingSprite(Player* player);
 void createPiece(Player* player);
 void manageFalling(Player* player);
 void pieceIntoBoard(Player* player);
@@ -56,7 +53,6 @@ int main()
         handleInput(&P1, JOY_readJoypad(JOY_1));
         handleInput(&P2, JOY_readJoypad(JOY_2));
 
-
         if(collisionTest(&P1, BOTTOM)==false){}
         else pieceIntoBoard(&P1);
 
@@ -102,40 +98,8 @@ void printDebug()
     if(P1.flag_status==toppedOut)
     {
         sprintf(debug_string,"P1 topped out");
-        VDP_drawText(debug_string,5,2);
+        VDP_drawText(debug_string,6,2);
     }
-}
-
-void initialize()
-{
-    P1.numColors=3;
-    P2.numColors=P1.numColors;
-
-    //setRandomSeed(getTime(0));
-    //waitMs(randomRange(1,8));
-
-    clearBoard(&P1);
-    clearBoard(&P2);
-
-    //P1.flag_status=redraw;
-
-    P1.fallingPiece[0] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
-    P1.fallingPiece[1] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
-
-    P2.fallingPiece[0] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
-    P2.fallingPiece[1] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
-
-    P1.flag_status=needPiece;
-    P2.flag_status=needPiece;
-
-    P1.fallingIncrement=0;
-    P2.fallingIncrement=0;
-}
-
-void drawFallingSprite(Player* player)
-{
-    SPR_setPosition(player->fallingPiece[0],player->spriteX,player->spriteY);
-    SPR_setPosition(player->fallingPiece[1],player->spriteX,player->spriteY-TILESIZE);
 }
 
 void createPiece(Player* player)
@@ -153,6 +117,9 @@ void createPiece(Player* player)
     player->xPosition=4;
     player->yPosition=1;
     player->moveDelay=0;
+
+    SPR_setVisibility(player->fallingPiece[0],VISIBLE);
+    SPR_setVisibility(player->fallingPiece[1],VISIBLE);
 
     player->flag_status=redraw;
 }
@@ -175,9 +142,11 @@ void manageFalling(Player* player)
 
 void pieceIntoBoard(Player* player)
 {
-    player->board[player->xPosition][player->yPosition]=player->newPiece[0];//where are the colors stored? need new vals probly
-    //also need the second piece, we need to account for rotation position when we lock it in
+    player->board[player->xPosition][player->yPosition]=player->newPiece[0];
     player->board[player->xPosition][player->yPosition-1]=player->newPiece[1];
+
+    SPR_setVisibility(player->fallingPiece[0],HIDDEN);
+    SPR_setVisibility(player->fallingPiece[1],HIDDEN);
 
     player->flag_status=needPiece;
 }
@@ -222,10 +191,13 @@ void handleInput(Player* player, u16 buttons)
 
     if (buttons & BUTTON_DOWN && player->fallDelay==0 && collisionTest(player, BOTTOM)==FALSE)
     {
-        //player->fallingIncrement++;
+        //player->fallingIncrement+=2;
+        //player->spriteY+=2;
+
         player->yPosition++;
-        player->fallDelay=FALL_DELAY_AMOUNT;
         player->spriteY+=TILESIZE;
+
+        player->fallDelay=FALL_DELAY_AMOUNT;
     }
 }
 
@@ -266,15 +238,27 @@ void printBoard()
                     break;
 
                     case 2://0,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+4), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+ADDAMOUNT), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 3://0,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+4+4), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+ADDAMOUNT2), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 4://0,4
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+ADDAMOUNT3), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 5://0,5
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+ADDAMOUNT4), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 6://0,6
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+ADDAMOUNT5), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 16://1,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 2), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 17://1,1
@@ -282,43 +266,163 @@ void printBoard()
                     break;
 
                     case 18://1,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 16), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+15), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 19://1,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 17), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+16), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 20://1,4
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+17), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 21://1,5
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+18), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 22://1,6
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+19), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 32://2,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+4), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+ADDAMOUNT), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 33://2,1 - flipped 1,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 16), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+15), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 34://2,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+4), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 35://2,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 18), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+20), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 36://2,4
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+21), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 37://2,5
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+22), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 38://2,6
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+23), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 48://3,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+4+4), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+ADDAMOUNT2), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 49://3,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 17), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+16), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 50://3,2 - a flipped 23
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 18), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+20), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 51://3,3 solid green
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+4+4), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT2), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 52://3,4
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+24), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 53://3,5
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+25), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 54://3,6
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+26), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 64://4,0
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+ADDAMOUNT3), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 65://4,1
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+17), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 66://4,2
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+21), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 67://4,3
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+24), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 68://4,4 solid
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT3), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 69://4,5
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+27), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 70://4,6
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+28), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 80://5,0
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+ADDAMOUNT4), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 81://5,1
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+18), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 82://5,2
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+22), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 83://5,3
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+25), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 84://5,4
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+27), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 85://5,5 solid
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT4), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 86://5,6
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+29), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 96://6,0
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+ADDAMOUNT5), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 97://6,1
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+19), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 98://6,2
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+23), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 99://6,3
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+26), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 100://6,4
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+28), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 101://6,5
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+29), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 102://6,6 solid
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT5), drawPosX, drawPosY, 1, 1);
                     break;
                 }
                 
@@ -353,11 +457,23 @@ void printBoard()
                     break;
 
                     case 2://0,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+4), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+ADDAMOUNT), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 3://0,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+4+4), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+ADDAMOUNT2), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 4://0,4
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+ADDAMOUNT3), drawPosX,drawPosY, 1, 1);
+                    break;
+
+                    case 5://0,5
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+ADDAMOUNT4), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 6://0,6
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+ADDAMOUNT5), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 16://1,0
@@ -369,43 +485,163 @@ void printBoard()
                     break;
 
                     case 18://1,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 13), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+0), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 19://1,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 14), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+1), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 20://1,4
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+2), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 21://1,5
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+3), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 22://1,6
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+4), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 32://2,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+4), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+ADDAMOUNT), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 33://2,1 - flipped 1,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 13), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+0), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 34://2,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 1+4), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 1+ADDAMOUNT), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 35://2,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 15), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+5), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 36://2,4
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+6), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 37://2,5
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+7), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 38://2,6
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+8), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 48://3,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+4+4), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+ADDAMOUNT2), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 49://3,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 14), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+1), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 50://3,2 - a flipped 23
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 15), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+5), drawPosX, drawPosY, 1, 1);
                     break;
 
                     case 51://3,3 solid green
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+4+4), drawPosX, drawPosY, 1, 1);
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT2), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 52://3,4
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+9), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 53://3,5
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+10), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 54://3,6
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+11), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 64://4,0
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+ADDAMOUNT3), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 65://4,1
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+2), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 66://4,2
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+6), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 67://4,3
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+9), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 68://4,4 solid
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT3), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 69://4,5
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+12), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 70://4,6
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+13), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 80://5,0
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+ADDAMOUNT4), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 81://5,1
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+3), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 82://5,2
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+7), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 83://5,3
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+10), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 84://5,4
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+12), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 85://5,5 solid
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT4), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 86://5,6
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+14), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 96://6,0
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+ADDAMOUNT5), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 97://6,1
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+4), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 98://6,2
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+8), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 99://6,3
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+11), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 100://6,4
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+13), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 101://6,5
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+14), drawPosX, drawPosY, 1, 1);
+                    break;
+
+                    case 102://6,6 solid
+                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT5), drawPosX, drawPosY, 1, 1);
                     break;
                 }
             
@@ -416,14 +652,13 @@ void printBoard()
     }
 
 //dynamic inner section vram load + draw
-
-    #define allred 0x4444
-    #define allyel 0x5555
-    #define allgrn 0x6666
-    #define allblu 0x7777
-    #define allprp 0x8888
-    #define allgbg 0x9999
     #define allblank 0x0000
+    #define allcolor1 0x4444
+    #define allcolor2 0x5555
+    #define allcolor3 0x6666
+    #define allcolor4 0x7777
+    #define allcolor5 0x8888
+    #define allgarbage 0x9999
 
     u32 tile[8];
     u16 leftside,rightside;
@@ -443,20 +678,20 @@ void printBoard()
                         if(section==0)sectionAdd=1;//upper half
                         else sectionAdd=0;//lower half
 
-                        if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==1)leftside=allred;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==2)leftside=allyel;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==3)leftside=allgrn;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==4)leftside=allblu;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==5)leftside=allprp;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==6)leftside=allgbg;
+                        if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==1)leftside=allcolor1;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==2)leftside=allcolor2;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==3)leftside=allcolor3;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==4)leftside=allcolor4;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==5)leftside=allcolor5;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==6)leftside=allgarbage;
                         else leftside=allblank;
 
-                        if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==1)rightside=allred;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==2)rightside=allyel;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==3)rightside=allgrn;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==4)rightside=allblu;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==5)rightside=allprp;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==6)rightside=allgbg;
+                        if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==1)rightside=allcolor1;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==2)rightside=allcolor2;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==3)rightside=allcolor3;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==4)rightside=allcolor4;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==5)rightside=allcolor5;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==6)rightside=allgarbage;
                         else rightside=allblank;
 
                         tile[yDraw+section]=(leftside<<16)+rightside;

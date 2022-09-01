@@ -15,9 +15,6 @@ typedef struct {
     u8 innerconnect[4][7][2];
 
     u8 fallingIncrement;
-    
-    //u8 rotation;//0=spawn. secondary piece above. 1=secondary piece on the right. 2=secondary piece below. 3=to the left
-    //u8 fallingPieceArea[3][3];//[0][0] is top left, [2][2] is bot right
 
     u8 moveDelay;
     u8 fallDelay;
@@ -30,10 +27,13 @@ Player P1;
 Player P2;
 
 u8 randomRange(u8 rangeStart, u8 rangeEnd);
+void initialize();
 void loadTiles();
+void loadDebugFieldData();
+void clearBoard(Player* player);
 void drawTile(u8 xPos, u8 yPos);
 void printBoard();
-void clearBoard(Player* player);
+void drawFallingSprite(Player* player);
 
 char debug_string[40] = "";
 
@@ -67,48 +67,89 @@ enum direction
 #define MOVE_DELAY_AMOUNT 6
 #define FALL_DELAY_AMOUNT 4
 
-u8 randomRange(u8 rangeStart, u8 rangeEnd)//general use function
-{
-    return (random() % (rangeEnd + 1 - rangeStart)) + rangeStart;
-}
-
-#define ADDAMOUNT 4 //#colors + 1 ? 3colors+1=4, 5colors+1=6
-#define EXTRA_TILES_BEGIN 13
+#define globalNumColors 6
+#define ADDAMOUNT 4
+#define ADDAMOUNT2 8
+#define ADDAMOUNT3 12
+#define ADDAMOUNT4 16
+#define ADDAMOUNT5 20
+#define extra_tiles_start  (4 + (ADDAMOUNT*(globalNumColors-1)) + 1)
 
 void loadTiles()
 {
     VDP_loadFontData(tileset_Font_Namco.tiles, 96, CPU);
     
     VDP_loadTileSet(fullblock_color1.tileset,1,CPU);
-    VDP_loadTileSet(fullblock_color2.tileset,1+ADDAMOUNT,CPU);
-    VDP_loadTileSet(fullblock_color3.tileset,1+ADDAMOUNT+ADDAMOUNT,CPU);
+    VDP_loadTileSet(fullblock_color2.tileset,1+(ADDAMOUNT*1),CPU);
+    VDP_loadTileSet(fullblock_color3.tileset,1+(ADDAMOUNT*2),CPU);
+    VDP_loadTileSet(fullblock_color4.tileset,1+(ADDAMOUNT*3),CPU);
+    VDP_loadTileSet(fullblock_color5.tileset,1+(ADDAMOUNT*4),CPU);
+    VDP_loadTileSet(fullblock_color6.tileset,1+(ADDAMOUNT*5),CPU);
 
     VDP_loadTileSet(topblock_color1.tileset,2,CPU);
-    VDP_loadTileSet(topblock_color2.tileset,2+ADDAMOUNT,CPU);
-    VDP_loadTileSet(topblock_color3.tileset,2+ADDAMOUNT+ADDAMOUNT,CPU);
-    
+    VDP_loadTileSet(topblock_color2.tileset,2+(ADDAMOUNT*1),CPU);
+    VDP_loadTileSet(topblock_color3.tileset,2+(ADDAMOUNT*2),CPU);
+    VDP_loadTileSet(topblock_color4.tileset,2+(ADDAMOUNT*3),CPU);
+    VDP_loadTileSet(topblock_color5.tileset,2+(ADDAMOUNT*4),CPU);
+    VDP_loadTileSet(topblock_color6.tileset,2+(ADDAMOUNT*5),CPU);
+
     VDP_loadTileSet(rightblock_color1.tileset,3,CPU);
-    VDP_loadTileSet(rightblock_color2.tileset,3+ADDAMOUNT,CPU);
-    VDP_loadTileSet(rightblock_color3.tileset,3+ADDAMOUNT+ADDAMOUNT,CPU);
+    VDP_loadTileSet(rightblock_color2.tileset,3+(ADDAMOUNT*1),CPU);
+    VDP_loadTileSet(rightblock_color3.tileset,3+(ADDAMOUNT*2),CPU);
+    VDP_loadTileSet(rightblock_color4.tileset,3+(ADDAMOUNT*3),CPU);
+    VDP_loadTileSet(rightblock_color5.tileset,3+(ADDAMOUNT*4),CPU);
+    VDP_loadTileSet(rightblock_color6.tileset,3+(ADDAMOUNT*5),CPU);
 
     VDP_loadTileSet(cornerblock_color1.tileset,4,CPU);
-    VDP_loadTileSet(cornerblock_color2.tileset,4+ADDAMOUNT,CPU);
-    VDP_loadTileSet(cornerblock_color3.tileset,4+ADDAMOUNT+ADDAMOUNT,CPU);
+    VDP_loadTileSet(cornerblock_color2.tileset,4+(ADDAMOUNT*1),CPU);
+    VDP_loadTileSet(cornerblock_color3.tileset,4+(ADDAMOUNT*2),CPU);
+    VDP_loadTileSet(cornerblock_color4.tileset,4+(ADDAMOUNT*3),CPU);
+    VDP_loadTileSet(cornerblock_color5.tileset,4+(ADDAMOUNT*4),CPU);
+    VDP_loadTileSet(cornerblock_color6.tileset,4+(ADDAMOUNT*5),CPU);
 
-    VDP_loadTileSet(leftright12.tileset,EXTRA_TILES_BEGIN+0,CPU);//1,2
-    VDP_loadTileSet(leftright13.tileset,EXTRA_TILES_BEGIN+1,CPU);//1,3
-    VDP_loadTileSet(leftright23.tileset,EXTRA_TILES_BEGIN+2,CPU);//2,3
+    VDP_loadTileSet(leftright12.tileset,extra_tiles_start+0,CPU);//1,2
+    VDP_loadTileSet(leftright13.tileset,extra_tiles_start+1,CPU);//1,3
+    VDP_loadTileSet(leftright14.tileset,extra_tiles_start+2,CPU);
+    VDP_loadTileSet(leftright15.tileset,extra_tiles_start+3,CPU);
+    VDP_loadTileSet(leftright16.tileset,extra_tiles_start+4,CPU);
 
-    VDP_loadTileSet(updown12.tileset,EXTRA_TILES_BEGIN+3,CPU);//1,2
-    VDP_loadTileSet(updown13.tileset,EXTRA_TILES_BEGIN+4,CPU);//1,3
-    VDP_loadTileSet(updown23.tileset,EXTRA_TILES_BEGIN+5,CPU);//2,3
+    VDP_loadTileSet(leftright23.tileset,extra_tiles_start+5,CPU);//2,3
+    VDP_loadTileSet(leftright24.tileset,extra_tiles_start+6,CPU);
+    VDP_loadTileSet(leftright25.tileset,extra_tiles_start+7,CPU);
+    VDP_loadTileSet(leftright26.tileset,extra_tiles_start+8,CPU);
 
-    VDP_loadTileSet(topbot12.tileset,EXTRA_TILES_BEGIN+6,CPU);//1,2
-    VDP_loadTileSet(topbot13.tileset,EXTRA_TILES_BEGIN+7,CPU);//1,3
-    VDP_loadTileSet(topbot23.tileset,EXTRA_TILES_BEGIN+8,CPU);//2,3
+    VDP_loadTileSet(leftright34.tileset,extra_tiles_start+9,CPU);
+    VDP_loadTileSet(leftright35.tileset,extra_tiles_start+10,CPU);
+    VDP_loadTileSet(leftright36.tileset,extra_tiles_start+11,CPU);
+
+    VDP_loadTileSet(leftright45.tileset,extra_tiles_start+12,CPU);
+    VDP_loadTileSet(leftright46.tileset,extra_tiles_start+13,CPU);
+
+    VDP_loadTileSet(leftright56.tileset,extra_tiles_start+14,CPU);
+
+
+    VDP_loadTileSet(updown12.tileset,extra_tiles_start+15,CPU);//1,2
+    VDP_loadTileSet(updown13.tileset,extra_tiles_start+16,CPU);//1,3
+    VDP_loadTileSet(updown14.tileset,extra_tiles_start+17,CPU);
+    VDP_loadTileSet(updown15.tileset,extra_tiles_start+18,CPU);
+    VDP_loadTileSet(updown16.tileset,extra_tiles_start+19,CPU);
+
+    VDP_loadTileSet(updown23.tileset,extra_tiles_start+20,CPU);//2,3
+    VDP_loadTileSet(updown24.tileset,extra_tiles_start+21,CPU);
+    VDP_loadTileSet(updown25.tileset,extra_tiles_start+22,CPU);
+    VDP_loadTileSet(updown26.tileset,extra_tiles_start+23,CPU);
+
+    VDP_loadTileSet(updown34.tileset,extra_tiles_start+24,CPU);
+    VDP_loadTileSet(updown35.tileset,extra_tiles_start+25,CPU);
+    VDP_loadTileSet(updown36.tileset,extra_tiles_start+26,CPU);
+
+    VDP_loadTileSet(updown45.tileset,extra_tiles_start+27,CPU);
+    VDP_loadTileSet(updown46.tileset,extra_tiles_start+28,CPU);
+
+    VDP_loadTileSet(updown56.tileset,extra_tiles_start+29,CPU);
 }
 
-#define innerSectionsVRAM EXTRA_TILES_BEGIN+8//22//56 tiles worth of VRAM (28 per player)
+#define innerSectionsVRAM extra_tiles_start+30// 56 tiles worth of VRAM (28 per player)
 
 void clearBoard(Player* player)
 {
@@ -119,6 +160,11 @@ void clearBoard(Player* player)
             player->board[boardX][boardY]=0;
         }
     }
+}
+
+u8 randomRange(u8 rangeStart, u8 rangeEnd)//general use function
+{
+    return (random() % (rangeEnd + 1 - rangeStart)) + rangeStart;
 }
 
 void loadDebugFieldData()
@@ -143,12 +189,40 @@ void loadDebugFieldData()
 */
 }
 
+void initialize()
+{
+    P1.numColors=globalNumColors;
+    P2.numColors=P1.numColors;
+
+    clearBoard(&P1);
+    clearBoard(&P2);
+
+    P1.fallingPiece[0] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
+    P1.fallingPiece[1] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
+
+    P2.fallingPiece[0] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
+    P2.fallingPiece[1] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
+
+    P1.flag_status=needPiece;
+    P2.flag_status=needPiece;
+
+    P1.fallingIncrement=0;
+    P2.fallingIncrement=0;
+}
+
+void drawFallingSprite(Player* player)
+{
+    SPR_setPosition(player->fallingPiece[0],player->spriteX,player->spriteY);
+    SPR_setPosition(player->fallingPiece[1],player->spriteX,player->spriteY-TILESIZE);
+}
+
 void drawTile(u8 xPos, u8 yPos)//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
 {
     u8 colorAdd=0;//4 tiles for each color. so color 2 is adding 4, color 3 is adding 8
 
     //if we are drawing a tile other than color 1, we need to increase the tile index    
     if(P1.board[xPos][yPos]>1)colorAdd=(P1.board[xPos][yPos]-1)<<2;//multiply by 4
+    //if(P1.board[xPos][yPos]>1)colorAdd=(P1.board[xPos][yPos]-1)<<(globalNumColors-1);//multiply by 4
 
     u8 drawingxPos=xPos+(xPos>>1);
     u8 drawingyPos=yPos+(yPos>>1);
