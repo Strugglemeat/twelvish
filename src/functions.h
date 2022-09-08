@@ -154,7 +154,8 @@ void loadTiles()
     VDP_loadTileSet(updown56.tileset,extra_tiles_start+29,CPU);
 }
 
-#define innerSectionsVRAM extra_tiles_start+30// 56 tiles worth of VRAM (28 per player)
+#define innerSectionsVRAM extra_tiles_start+30// 64 tiles worth of VRAM (32 per player)
+#define endOfInnerSectionsVRAM innerSectionsVRAM+64
 
 void clearBoard(Player* player)
 {
@@ -176,7 +177,7 @@ void loadDebugFieldData()
 {
     for (u8 x=1;x<maxX+1;x++)
     {
-        for (u8 y=6;y<maxY+1;y++)
+        for (u8 y=7;y<maxY+1;y++)
         {
             P1.board[x][y]=randomRange(1,P1.numColors);
         }

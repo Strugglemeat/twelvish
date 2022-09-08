@@ -35,7 +35,7 @@ int main()
     initialize();
 
     //loadDebugFieldData();
-    //printBoard(1,1,maxX,maxY);
+    //printBoard(1,1,maxX,maxY+1);
 
     while(1)
     {
@@ -68,6 +68,12 @@ int main()
             P1.flag_status=nothing;
         }
 
+        if(P2.flag_status==redraw)
+        {
+            printBoard(P2.drawStartX,P2.drawStartY,P2.drawEndX,P2.drawEndY);
+            P2.flag_status=nothing;
+        }
+
         drawFallingSprite(&P1);
         drawFallingSprite(&P2);
 
@@ -98,6 +104,9 @@ void printDebug()
         sprintf(debug_string,"P1 topped out");
         VDP_drawText(debug_string,6,2);
     }
+
+    //sprintf(debug_string,"P2:%d", P2.flag_status);
+    //VDP_drawText(debug_string,25,5);
 }
 
 void createPiece(Player* player)
@@ -217,14 +226,14 @@ void printBoard(u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, fro
     s8 drawPosX,drawPosY;
     u8 i;
 
-    u8 oddAdder=0;
+    u8 yOddAdder=0;
     //if(startY%2!=0)oddAdder=1;//does modulo take a lot of cycles? running this a lot
-    if((startY&1)!=0)oddAdder=1;
+    if((startY&1)!=0)yOddAdder=1;
 
 //updown
     for (u8 updownX=startX;updownX<endX+1;updownX++)//u8 updownX=1 starts on updownX at 1, what happens if it's 2?
     {
-        for (u8 updownY=startY+oddAdder;updownY<endY+1;updownY+=2)//u8 updownY=2 starts on updwonY at 2, what happens if it's 1?
+        for (u8 updownY=startY+yOddAdder;updownY<endY+1;updownY+=2)//u8 updownY=2 starts on updownY at 2, what happens if it's 1?
         {
             if(P1.board[updownX][updownY]!=0 || P1.board[updownX][updownY+1]!=0)
             {
@@ -439,10 +448,16 @@ void printBoard(u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, fro
         }
     }
 
+    u8 xOddAdder=0;
+    if((startX&1)==0)xOddAdder=1;
+
+    u8 endXadder=0;
+    if(endX<=maxX)endXadder=1;
+
 //leftright 
-    for (u8 leftrightY=startY;leftrightY<endY+1;leftrightY++)
+    for (u8 leftrightY=startY;leftrightY<endY;leftrightY++)
     {
-        for (u8 leftrightX=1;leftrightX<maxX;leftrightX+=2)//***************needs updating
+        for (u8 leftrightX=startX-xOddAdder;leftrightX<endX+endXadder;leftrightX+=2)//u8 leftrightX=1
         {
             if(P1.board[leftrightX][leftrightY]!=0 || P1.board[leftrightX+1][leftrightY]!=0)
             {
@@ -668,16 +683,19 @@ void printBoard(u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, fro
     #define allgarbage 0x9999
 
     u32 tile[8];
+
     u16 leftside,rightside;
     u8 tileIncrementer=0;
-    u8 sectionAdd;
+    u8 UpperHalfFlag;
 
-    u8 endXadder=0;
-    if(endX<=maxX)endXadder=1;
+    //if(startX>2)tileIncrementer+=(startX-1);
 
-    for(u8 innerConnectorRow=1;innerConnectorRow<endX+endXadder;innerConnectorRow+=2)
+    //if(startY>3)tileIncrementer-=(startY-1);
+    //if(startY>12)tileIncrementer+=1;
+
+    for(u8 innerConnectorRow=1;innerConnectorRow<endX+endXadder;innerConnectorRow+=2)//for(u8 innerConnectorRow=startX-xOddAdder;innerConnectorRow<endX+endXadder;innerConnectorRow+=2)
     {
-        for(u8 innerConnectorColumn=3;innerConnectorColumn<maxY+1;innerConnectorColumn+=2)//u8 innerConnectorColumn=3
+        for(u8 innerConnectorColumn=3;innerConnectorColumn<maxY+1;innerConnectorColumn+=2)
         {
             if(P1.board[innerConnectorRow][innerConnectorColumn]!=0 || P1.board[innerConnectorRow+1][innerConnectorColumn]!=0)
             {
@@ -685,23 +703,23 @@ void printBoard(u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, fro
                 {
                     for (u8 yDraw=0;yDraw<4;yDraw++)
                     {
-                        if(section==0)sectionAdd=1;//upper half
-                        else sectionAdd=0;//lower half
+                        if(section<=2)UpperHalfFlag=1;//upper half
+                        else UpperHalfFlag=0;//lower half
 
-                        if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==1)leftside=allcolor1;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==2)leftside=allcolor2;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==3)leftside=allcolor3;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==4)leftside=allcolor4;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==5)leftside=allcolor5;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-sectionAdd]==6)leftside=allgarbage;
+                        if(P1.board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==1)leftside=allcolor1;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==2)leftside=allcolor2;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==3)leftside=allcolor3;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==4)leftside=allcolor4;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==5)leftside=allcolor5;
+                        else if(P1.board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==6)leftside=allgarbage;
                         else leftside=allblank;
 
-                        if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==1)rightside=allcolor1;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==2)rightside=allcolor2;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==3)rightside=allcolor3;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==4)rightside=allcolor4;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==5)rightside=allcolor5;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-sectionAdd]==6)rightside=allgarbage;
+                        if(P1.board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==1)rightside=allcolor1;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==2)rightside=allcolor2;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==3)rightside=allcolor3;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==4)rightside=allcolor4;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==5)rightside=allcolor5;
+                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==6)rightside=allgarbage;
                         else rightside=allblank;
 
                         tile[yDraw+section]=(leftside<<16)+rightside;
@@ -714,4 +732,5 @@ void printBoard(u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, fro
             tileIncrementer++;
         }
     }
+
 }
