@@ -8,6 +8,7 @@ void manageFalling(Player* player);
 void pieceIntoBoard(Player* player);
 void handleInput(Player* player, u16 buttons);
 bool collisionTest(Player* player, u8 direction);
+void printBoard(u8 startX, u8 startY, u8 endX, u8 endY);
 
 int main()
 {
@@ -33,11 +34,8 @@ int main()
 
     initialize();
 
-    #define spriteXorigin 48+36
-    #define spriteYorigin -12//0//12
-
     //loadDebugFieldData();
-    //printBoard();
+    //printBoard(1,1,maxX,maxY);
 
     while(1)
     {
@@ -66,7 +64,7 @@ int main()
         
         if(P1.flag_status==redraw)
         {
-            printBoard();
+            printBoard(P1.drawStartX,P1.drawStartY,P1.drawEndX,P1.drawEndY);
             P1.flag_status=nothing;
         }
 
@@ -105,7 +103,7 @@ void printDebug()
 void createPiece(Player* player)
 {
     if(player==&P1)player->spriteX=spriteXorigin;
-    else if(player==&P2)player->spriteX=spriteXorigin+(10*TILESIZE);
+    else if(player==&P2)player->spriteX=spriteXorigin+(9*TILESIZE)-4;
     player->spriteY=spriteYorigin+TILESIZE+TILESIZE+TILESIZE;
 
     for (u8 createIndex=0;createIndex<2;createIndex++)
@@ -138,17 +136,6 @@ void manageFalling(Player* player)
     }
 
     player->spriteY++;
-}
-
-void pieceIntoBoard(Player* player)
-{
-    player->board[player->xPosition][player->yPosition]=player->newPiece[0];
-    player->board[player->xPosition][player->yPosition-1]=player->newPiece[1];
-
-    SPR_setVisibility(player->fallingPiece[0],HIDDEN);
-    SPR_setVisibility(player->fallingPiece[1],HIDDEN);
-
-    player->flag_status=needPiece;
 }
 
 bool collisionTest(Player* player, u8 direction)
@@ -201,11 +188,27 @@ void handleInput(Player* player, u16 buttons)
     }
 }
 
-void printBoard()
+void pieceIntoBoard(Player* player)
+{
+    player->board[player->xPosition][player->yPosition]=player->newPiece[0];
+    player->board[player->xPosition][player->yPosition-1]=player->newPiece[1];
+
+    SPR_setVisibility(player->fallingPiece[0],HIDDEN);
+    SPR_setVisibility(player->fallingPiece[1],HIDDEN);
+
+    player->drawStartX=player->xPosition;
+    player->drawStartY=player->yPosition-1;
+    player->drawEndX=player->xPosition+1;
+    player->drawEndY=player->yPosition+1;
+
+    player->flag_status=needPiece;
+}
+
+void printBoard(u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, from top to bottom
 {  
-    for(u8 xDraw=1;xDraw<maxX+1;xDraw++)
+    for(u8 xDraw=startX;xDraw<endX+1;xDraw++)
     {
-        for(u8 yDraw=1;yDraw<maxY+1;yDraw++)
+        for(u8 yDraw=startY;yDraw<endY;yDraw++)
         {
            if(P1.board[xDraw][yDraw]!=0)drawTile(xDraw,yDraw);
         }
@@ -214,10 +217,14 @@ void printBoard()
     s8 drawPosX,drawPosY;
     u8 i;
 
+    u8 oddAdder=0;
+    //if(startY%2!=0)oddAdder=1;//does modulo take a lot of cycles? running this a lot
+    if((startY&1)!=0)oddAdder=1;
+
 //updown
-    for (u8 updownX=1;updownX<maxX+1;updownX++)
+    for (u8 updownX=startX;updownX<endX+1;updownX++)//u8 updownX=1 starts on updownX at 1, what happens if it's 2?
     {
-        for (u8 updownY=2;updownY<maxY;updownY+=2)
+        for (u8 updownY=startY+oddAdder;updownY<endY+1;updownY+=2)//u8 updownY=2 starts on updwonY at 2, what happens if it's 1?
         {
             if(P1.board[updownX][updownY]!=0 || P1.board[updownX][updownY+1]!=0)
             {
@@ -433,9 +440,9 @@ void printBoard()
     }
 
 //leftright 
-    for (u8 leftrightY=1;leftrightY<maxY+1;leftrightY++)
+    for (u8 leftrightY=startY;leftrightY<endY+1;leftrightY++)
     {
-        for (u8 leftrightX=1;leftrightX<maxX;leftrightX+=2)
+        for (u8 leftrightX=1;leftrightX<maxX;leftrightX+=2)//***************needs updating
         {
             if(P1.board[leftrightX][leftrightY]!=0 || P1.board[leftrightX+1][leftrightY]!=0)
             {
@@ -665,9 +672,12 @@ void printBoard()
     u8 tileIncrementer=0;
     u8 sectionAdd;
 
-    for(u8 innerConnectorRow=1;innerConnectorRow<maxX;innerConnectorRow+=2)
+    u8 endXadder=0;
+    if(endX<=maxX)endXadder=1;
+
+    for(u8 innerConnectorRow=1;innerConnectorRow<endX+endXadder;innerConnectorRow+=2)
     {
-        for(u8 innerConnectorColumn=3;innerConnectorColumn<maxY+1;innerConnectorColumn+=2)
+        for(u8 innerConnectorColumn=3;innerConnectorColumn<maxY+1;innerConnectorColumn+=2)//u8 innerConnectorColumn=3
         {
             if(P1.board[innerConnectorRow][innerConnectorColumn]!=0 || P1.board[innerConnectorRow+1][innerConnectorColumn]!=0)
             {
