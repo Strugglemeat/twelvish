@@ -1,25 +1,26 @@
+#define fallingPieceNumberOfTiles 3
+
 typedef struct {
 
     u8 board[10][18];//8 wide by 16 tall. [0][0] not used.
     u8 flag_status;
 
-    Sprite* fallingPiece[2];
+    Sprite* fallingPiece[fallingPieceNumberOfTiles];
+    u8 newPiece[fallingPieceNumberOfTiles];//used in createPiece
     u16 spriteX;
     s16 spriteY;
     u8 xPosition,yPosition;
+
     u8 numColors;
 
     u8 leftright[4][16];
     u8 updown[7][8];
-    //u8 topbot[4][2];
     u8 innerconnect[4][7][2];
 
     u8 fallingIncrement;
 
     u8 moveDelay;
     u8 fallDelay;
-
-    u8 newPiece[2];//used in createPiece
 
     u8 drawStartX,drawStartY,drawEndX,drawEndY;
 
@@ -205,9 +206,11 @@ void initialize()
 
     P1.fallingPiece[0] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
     P1.fallingPiece[1] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
+    P1.fallingPiece[2] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
 
     P2.fallingPiece[0] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
     P2.fallingPiece[1] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
+    P2.fallingPiece[2] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
 
     P1.flag_status=needPiece;
     P2.flag_status=needPiece;
@@ -220,6 +223,7 @@ void drawFallingSprite(Player* player)
 {
     SPR_setPosition(player->fallingPiece[0],player->spriteX,player->spriteY);
     SPR_setPosition(player->fallingPiece[1],player->spriteX,player->spriteY-TILESIZE);
+    SPR_setPosition(player->fallingPiece[2],player->spriteX,player->spriteY-TILESIZE-TILESIZE);
 }
 
 void printBoardAll()

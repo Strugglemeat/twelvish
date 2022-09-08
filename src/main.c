@@ -115,7 +115,7 @@ void createPiece(Player* player)
     else if(player==&P2)player->spriteX=spriteXorigin+(9*TILESIZE)-4;
     player->spriteY=spriteYorigin+TILESIZE+TILESIZE+TILESIZE;
 
-    for (u8 createIndex=0;createIndex<2;createIndex++)
+    for (u8 createIndex=0;createIndex<3;createIndex++)
     {
         player->newPiece[createIndex]=randomRange(1,player->numColors);//this is assigning color
         SPR_setFrame(player->fallingPiece[createIndex],player->newPiece[createIndex]-1);
@@ -127,6 +127,7 @@ void createPiece(Player* player)
 
     SPR_setVisibility(player->fallingPiece[0],VISIBLE);
     SPR_setVisibility(player->fallingPiece[1],VISIBLE);
+    SPR_setVisibility(player->fallingPiece[2],VISIBLE);
 
     player->flag_status=redraw;
 }
@@ -201,12 +202,14 @@ void pieceIntoBoard(Player* player)
 {
     player->board[player->xPosition][player->yPosition]=player->newPiece[0];
     player->board[player->xPosition][player->yPosition-1]=player->newPiece[1];
+    player->board[player->xPosition][player->yPosition-2]=player->newPiece[2];
 
     SPR_setVisibility(player->fallingPiece[0],HIDDEN);
     SPR_setVisibility(player->fallingPiece[1],HIDDEN);
+    SPR_setVisibility(player->fallingPiece[2],HIDDEN);
 
     player->drawStartX=player->xPosition;
-    player->drawStartY=player->yPosition-1;
+    player->drawStartY=player->yPosition-2;
     player->drawEndX=player->xPosition+1;
     player->drawEndY=player->yPosition+1;
 
@@ -215,6 +218,8 @@ void pieceIntoBoard(Player* player)
 
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, from top to bottom
 {  
+    if(startY<2)startY=2;//no need to draw tiles above the barrier area
+
     for(u8 xDraw=startX;xDraw<endX+1;xDraw++)
     {
         for(u8 yDraw=startY;yDraw<endY;yDraw++)
@@ -235,7 +240,8 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
 //updown
     for (u8 updownX=startX;updownX<endX+1;updownX++)//u8 updownX=1 starts on updownX at 1, what happens if it's 2?
     {
-        for (u8 updownY=startY+yOddAdder;updownY<endY+1;updownY+=2)//u8 updownY=2 starts on updownY at 2, what happens if it's 1?
+        //for (u8 updownY=startY+yOddAdder;updownY<endY+1;updownY+=2)
+        for (u8 updownY=2;updownY<maxY;updownY+=2)//u8 updownY=2 starts on updownY at 2, what happens if it's 1?
         {
             if(player->board[updownX][updownY]!=0 || player->board[updownX][updownY+1]!=0)
             {
@@ -698,7 +704,7 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     //if(startY>3)tileIncrementer-=(startY-1);
     //if(startY>12)tileIncrementer+=1;
 
-    for(u8 innerConnectorRow=1;innerConnectorRow<endX+endXadder;innerConnectorRow+=2)//for(u8 innerConnectorRow=startX-xOddAdder;innerConnectorRow<endX+endXadder;innerConnectorRow+=2)
+    for(u8 innerConnectorRow=1;innerConnectorRow<maxX;innerConnectorRow+=2)//for(u8 innerConnectorRow=startX-xOddAdder;innerConnectorRow<endX+endXadder;innerConnectorRow+=2)
     {
         for(u8 innerConnectorColumn=3;innerConnectorColumn<maxY+1;innerConnectorColumn+=2)
         {
@@ -737,4 +743,5 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
             tileIncrementer++;
         }
     }
+
 }
