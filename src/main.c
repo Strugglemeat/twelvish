@@ -8,7 +8,7 @@ void manageFalling(Player* player);
 void pieceIntoBoard(Player* player);
 void handleInput(Player* player, u16 buttons);
 bool collisionTest(Player* player, u8 direction);
-void printBoard(u8 startX, u8 startY, u8 endX, u8 endY);
+void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY);
 
 int main()
 {
@@ -35,7 +35,7 @@ int main()
     initialize();
 
     //loadDebugFieldData();
-    //printBoard(1,1,maxX,maxY+1);
+    //printBoard(&P1, 1,1,maxX,maxY+1);
 
     while(1)
     {
@@ -64,13 +64,13 @@ int main()
         
         if(P1.flag_status==redraw)
         {
-            printBoard(P1.drawStartX,P1.drawStartY,P1.drawEndX,P1.drawEndY);
+            printBoard(&P1, P1.drawStartX,P1.drawStartY,P1.drawEndX,P1.drawEndY);
             P1.flag_status=nothing;
         }
 
         if(P2.flag_status==redraw)
         {
-            printBoard(P2.drawStartX,P2.drawStartY,P2.drawEndX,P2.drawEndY);
+            printBoard(&P2, P2.drawStartX,P2.drawStartY,P2.drawEndX,P2.drawEndY);
             P2.flag_status=nothing;
         }
 
@@ -213,21 +213,23 @@ void pieceIntoBoard(Player* player)
     player->flag_status=needPiece;
 }
 
-void printBoard(u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, from top to bottom
+void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, from top to bottom
 {  
     for(u8 xDraw=startX;xDraw<endX+1;xDraw++)
     {
         for(u8 yDraw=startY;yDraw<endY;yDraw++)
         {
-           if(P1.board[xDraw][yDraw]!=0)drawTile(xDraw,yDraw);
+           if(player->board[xDraw][yDraw]!=0)drawTile(player, xDraw,yDraw);
         }
     }
+
+    u8 p2offsetX=0;
+    if(player==&P2)p2offsetX=13;
 
     s8 drawPosX,drawPosY;
     u8 i;
 
     u8 yOddAdder=0;
-    //if(startY%2!=0)oddAdder=1;//does modulo take a lot of cycles? running this a lot
     if((startY&1)!=0)yOddAdder=1;
 
 //updown
@@ -235,19 +237,19 @@ void printBoard(u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, fro
     {
         for (u8 updownY=startY+yOddAdder;updownY<endY+1;updownY+=2)//u8 updownY=2 starts on updownY at 2, what happens if it's 1?
         {
-            if(P1.board[updownX][updownY]!=0 || P1.board[updownX][updownY+1]!=0)
+            if(player->board[updownX][updownY]!=0 || player->board[updownX][updownY+1]!=0)
             {
                 i=0;
 
-                P1.updown[updownX][i]=(P1.board[updownX][updownY]<<4)+P1.board[updownX][updownY+1];
+                player->updown[updownX][i]=(player->board[updownX][updownY]<<4)+player->board[updownX][updownY+1];
 
                 //sprintf(debug_string,"UD:%d", P1.updown[updownX][i]);
                 //VDP_drawText(debug_string,34,1+yDrawAdd);
 
-                drawPosX=xOffset+updownX+((updownX)>>1);
+                drawPosX=xOffset+updownX+((updownX)>>1)+p2offsetX;
                 drawPosY=yOffset+updownY+((updownY)>>1);
 
-                switch(P1.updown[updownX][i])//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
+                switch(player->updown[updownX][i])//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
                 {
                     case 1://0,1
                     VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2), drawPosX,drawPosY, 1, 1);
@@ -459,20 +461,20 @@ void printBoard(u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, fro
     {
         for (u8 leftrightX=startX-xOddAdder;leftrightX<endX+endXadder;leftrightX+=2)//u8 leftrightX=1
         {
-            if(P1.board[leftrightX][leftrightY]!=0 || P1.board[leftrightX+1][leftrightY]!=0)
+            if(player->board[leftrightX][leftrightY]!=0 || player->board[leftrightX+1][leftrightY]!=0)
             {
                 i=0;
 
-                P1.leftright[i][leftrightY]=(P1.board[leftrightX][leftrightY]<<4)+P1.board[leftrightX+1][leftrightY];
+                player->leftright[i][leftrightY]=(player->board[leftrightX][leftrightY]<<4)+player->board[leftrightX+1][leftrightY];
                 //now we have the color of the left cell in the left half of this byte and the right color in the right half of this byte
 
                 //sprintf(debug_string,"LR:%d", P1.leftright[i][leftrightY]);
                 //VDP_drawText(debug_string,34,1+xDrawAdd);
 
-                drawPosX=xOffset+leftrightX+((leftrightX)>>1)+1;
+                drawPosX=xOffset+leftrightX+((leftrightX)>>1)+1+p2offsetX;
                 drawPosY=yOffset+leftrightY+((leftrightY-1)>>1);
 
-                switch(P1.leftright[i][leftrightY])//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
+                switch(player->leftright[i][leftrightY])//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
                 {
                     case 1://0,1
                     VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3), drawPosX,drawPosY, 1, 1);
@@ -688,6 +690,9 @@ void printBoard(u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, fro
     u8 tileIncrementer=0;
     u8 UpperHalfFlag;
 
+    u8 vramOffsetP2=0;
+    if(player==&P2)vramOffsetP2=32;
+
     //if(startX>2)tileIncrementer+=(startX-1);
 
     //if(startY>3)tileIncrementer-=(startY-1);
@@ -697,7 +702,7 @@ void printBoard(u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, fro
     {
         for(u8 innerConnectorColumn=3;innerConnectorColumn<maxY+1;innerConnectorColumn+=2)
         {
-            if(P1.board[innerConnectorRow][innerConnectorColumn]!=0 || P1.board[innerConnectorRow+1][innerConnectorColumn]!=0)
+            if(player->board[innerConnectorRow][innerConnectorColumn]!=0 || player->board[innerConnectorRow+1][innerConnectorColumn]!=0)
             {
                 for (u8 section=0;section<=4;section+=4)
                 {
@@ -706,31 +711,30 @@ void printBoard(u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, fro
                         if(section<=2)UpperHalfFlag=1;//upper half
                         else UpperHalfFlag=0;//lower half
 
-                        if(P1.board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==1)leftside=allcolor1;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==2)leftside=allcolor2;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==3)leftside=allcolor3;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==4)leftside=allcolor4;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==5)leftside=allcolor5;
-                        else if(P1.board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==6)leftside=allgarbage;
+                        if(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==1)leftside=allcolor1;
+                        else if(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==2)leftside=allcolor2;
+                        else if(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==3)leftside=allcolor3;
+                        else if(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==4)leftside=allcolor4;
+                        else if(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==5)leftside=allcolor5;
+                        else if(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==6)leftside=allgarbage;
                         else leftside=allblank;
 
-                        if(P1.board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==1)rightside=allcolor1;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==2)rightside=allcolor2;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==3)rightside=allcolor3;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==4)rightside=allcolor4;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==5)rightside=allcolor5;
-                        else if(P1.board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==6)rightside=allgarbage;
+                        if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==1)rightside=allcolor1;
+                        else if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==2)rightside=allcolor2;
+                        else if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==3)rightside=allcolor3;
+                        else if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==4)rightside=allcolor4;
+                        else if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==5)rightside=allcolor5;
+                        else if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==6)rightside=allgarbage;
                         else rightside=allblank;
 
                         tile[yDraw+section]=(leftside<<16)+rightside;
                     }
                 }
                 
-                VDP_loadTileData(tile, innerSectionsVRAM+tileIncrementer, 1, CPU);//VDP_loadTileData (const u32 *data, u16 index, u16 num, TransferMethod tm)
-                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, innerSectionsVRAM+tileIncrementer), xOffset+innerConnectorRow+(innerConnectorRow>>1)+1, yOffset+innerConnectorColumn+(innerConnectorColumn>>1)-1, 1, 1);
+                VDP_loadTileData(tile, innerSectionsVRAM+tileIncrementer+vramOffsetP2, 1, CPU);//VDP_loadTileData (const u32 *data, u16 index, u16 num, TransferMethod tm)
+                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, innerSectionsVRAM+tileIncrementer+vramOffsetP2), xOffset+innerConnectorRow+(innerConnectorRow>>1)+1+p2offsetX, yOffset+innerConnectorColumn+(innerConnectorColumn>>1)-1, 1, 1);
             }
             tileIncrementer++;
         }
     }
-
 }
