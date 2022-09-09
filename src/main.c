@@ -102,7 +102,7 @@ void printDebug()
     if(P1.flag_status==toppedOut)
     {
         sprintf(debug_string,"P1 topped out");
-        VDP_drawText(debug_string,6,2);
+        VDP_drawText(debug_string,1,2);
     }
 
     //sprintf(debug_string,"P2:%d", P2.flag_status);
@@ -122,12 +122,8 @@ void createPiece(Player* player)
     }
 
     player->xPosition=4;
-    player->yPosition=1;
+    player->yPosition=ySpawn;
     player->moveDelay=0;
-
-    SPR_setVisibility(player->fallingPiece[0],VISIBLE);
-    SPR_setVisibility(player->fallingPiece[1],VISIBLE);
-    SPR_setVisibility(player->fallingPiece[2],VISIBLE);
 
     player->flag_status=redraw;
 }
@@ -214,6 +210,17 @@ void pieceIntoBoard(Player* player)
     player->drawEndY=player->yPosition+1;
 
     player->flag_status=needPiece;
+}
+
+void drawFallingSprite(Player* player)
+{
+    SPR_setPosition(player->fallingPiece[0],player->spriteX,player->spriteY);
+    SPR_setPosition(player->fallingPiece[1],player->spriteX,player->spriteY-TILESIZE);
+    SPR_setPosition(player->fallingPiece[2],player->spriteX,player->spriteY-TILESIZE-TILESIZE);
+
+    if(player->yPosition==1)SPR_setVisibility(player->fallingPiece[0],VISIBLE);
+    if(player->yPosition==2)SPR_setVisibility(player->fallingPiece[1],VISIBLE);
+    if(player->yPosition==3)SPR_setVisibility(player->fallingPiece[2],VISIBLE);
 }
 
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, from top to bottom

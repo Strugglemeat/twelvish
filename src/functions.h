@@ -48,8 +48,10 @@ char debug_string[40] = "";
 #define xOffset 0//6
 #define yOffset 1
 
+#define ySpawn 0
+
 #define spriteXorigin 44//48+36+8
-#define spriteYorigin -12
+#define spriteYorigin -24
 
 #define player2offset 27
 #define p2spriteXcreate (18*TILESIZE)
@@ -215,18 +217,19 @@ void initialize()
     P2.fallingPiece[1] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
     P2.fallingPiece[2] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
 
+    SPR_setVisibility(P1.fallingPiece[0],HIDDEN);
+    SPR_setVisibility(P1.fallingPiece[1],HIDDEN);
+    SPR_setVisibility(P1.fallingPiece[2],HIDDEN);
+
+    SPR_setVisibility(P2.fallingPiece[0],HIDDEN);
+    SPR_setVisibility(P2.fallingPiece[1],HIDDEN);
+    SPR_setVisibility(P2.fallingPiece[2],HIDDEN);
+
     P1.flag_status=needPiece;
     P2.flag_status=needPiece;
 
     P1.fallingIncrement=0;
     P2.fallingIncrement=0;
-}
-
-void drawFallingSprite(Player* player)
-{
-    SPR_setPosition(player->fallingPiece[0],player->spriteX,player->spriteY);
-    SPR_setPosition(player->fallingPiece[1],player->spriteX,player->spriteY-TILESIZE);
-    SPR_setPosition(player->fallingPiece[2],player->spriteX,player->spriteY-TILESIZE-TILESIZE);
 }
 
 void drawTile(Player* player, u8 xPos, u8 yPos)//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
