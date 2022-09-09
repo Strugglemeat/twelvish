@@ -35,7 +35,7 @@ int main()
     initialize();
 
     //loadDebugFieldData();
-    //printBoard(&P1, 1,1,maxX,maxY+1);
+    //printBoard(&P1, 1,1,maxX+1,maxY+1);
 
     while(1)
     {
@@ -97,7 +97,7 @@ void printDebug()
     //VDP_drawText(debug_string,2,4);
 
     //sprintf(debug_string,"P1x:%d", P1.xPosition);
-    //VDP_drawText(debug_string,2,5);
+    //VDP_drawText(debug_string,1,2);
 
     if(P1.flag_status==toppedOut)
     {
@@ -112,7 +112,7 @@ void printDebug()
 void createPiece(Player* player)
 {
     if(player==&P1)player->spriteX=spriteXorigin;
-    else if(player==&P2)player->spriteX=spriteXorigin+(9*TILESIZE)-4;
+    else if(player==&P2)player->spriteX=spriteXorigin+p2spriteXcreate;
     player->spriteY=spriteYorigin+TILESIZE+TILESIZE+TILESIZE;
 
     for (u8 createIndex=0;createIndex<3;createIndex++)
@@ -220,7 +220,7 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
 {  
     if(startY<2)startY=2;//no need to draw tiles above the barrier area
 
-    for(u8 xDraw=startX;xDraw<endX+1;xDraw++)
+    for(u8 xDraw=startX;xDraw<endX;xDraw++)
     {
         for(u8 yDraw=startY;yDraw<endY;yDraw++)
         {
@@ -229,7 +229,7 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     }
 
     u8 p2offsetX=0;
-    if(player==&P2)p2offsetX=13;
+    if(player==&P2)p2offsetX=player2offset;
 
     s8 drawPosX,drawPosY;
     u8 i;
@@ -238,7 +238,7 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     if((startY&1)!=0)yOddAdder=1;
 
 //updown
-    for (u8 updownX=startX;updownX<endX+1;updownX++)//u8 updownX=1 starts on updownX at 1, what happens if it's 2?
+    for (u8 updownX=startX;updownX<endX;updownX++)//u8 updownX=1 starts on updownX at 1, what happens if it's 2?
     {
         //for (u8 updownY=startY+yOddAdder;updownY<endY+1;updownY+=2)
         for (u8 updownY=2;updownY<maxY;updownY+=2)//u8 updownY=2 starts on updownY at 2, what happens if it's 1?
@@ -465,7 +465,7 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
 //leftright 
     for (u8 leftrightY=startY;leftrightY<endY;leftrightY++)
     {
-        for (u8 leftrightX=startX-xOddAdder;leftrightX<endX+endXadder;leftrightX+=2)//u8 leftrightX=1
+        for (u8 leftrightX=1;leftrightX<maxX;leftrightX+=2)//leftrightX<endX+endXadder u8 leftrightX=startX-xOddAdder;
         {
             if(player->board[leftrightX][leftrightY]!=0 || player->board[leftrightX+1][leftrightY]!=0)
             {
@@ -704,7 +704,7 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     //if(startY>3)tileIncrementer-=(startY-1);
     //if(startY>12)tileIncrementer+=1;
 
-    for(u8 innerConnectorRow=1;innerConnectorRow<maxX;innerConnectorRow+=2)//for(u8 innerConnectorRow=startX-xOddAdder;innerConnectorRow<endX+endXadder;innerConnectorRow+=2)
+    for(u8 innerConnectorRow=1;innerConnectorRow<maxX+1;innerConnectorRow+=2)//for(u8 innerConnectorRow=startX-xOddAdder;innerConnectorRow<endX+endXadder;innerConnectorRow+=2)
     {
         for(u8 innerConnectorColumn=3;innerConnectorColumn<maxY+1;innerConnectorColumn+=2)
         {
@@ -731,6 +731,7 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
                         else if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==4)rightside=allcolor4;
                         else if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==5)rightside=allcolor5;
                         else if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==6)rightside=allgarbage;
+                        //else if(innerConnectorRow+1>=maxX)rightside=allblank;
                         else rightside=allblank;
 
                         tile[yDraw+section]=(leftside<<16)+rightside;
