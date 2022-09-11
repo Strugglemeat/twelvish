@@ -5,13 +5,14 @@ typedef struct {
     u8 board[9][18];//7 wide by 16 tall. [0][0] not used. array is [9] because [8] gets fucky with the inner tiles
     u8 flag_status;
 
-    Sprite* fallingPiece[fallingPieceNumberOfTiles];
-    u8 newPiece[fallingPieceNumberOfTiles];//used in createPiece
+    Sprite* fallingPieceSprite[fallingPieceNumberOfTiles];
+    u8 fallingPiece[fallingPieceNumberOfTiles];//used in createPiece
+    u8 nextPiece[fallingPieceNumberOfTiles];
     u16 spriteX;
     s16 spriteY;
     u8 xPosition,yPosition;
 
-    u8 numColors;
+    //u8 numColors;
 
     u8 leftright[4][16];
     u8 updown[7][8];
@@ -45,12 +46,12 @@ char debug_string[40] = "";
 #define maxX 7
 #define maxY 17 //because 0 is the top of the spawning piece
 
-#define xOffset 0//6
+#define xOffset 0
 #define yOffset 1
 
 #define ySpawn 0
 
-#define spriteXorigin 44//48+36+8
+#define spriteXorigin 44
 #define spriteYorigin -24
 
 #define player2offset 27
@@ -185,7 +186,8 @@ void loadDebugFieldData()
     {
         for (u8 y=7;y<maxY+1;y++)
         {
-            P1.board[x][y]=randomRange(1,P1.numColors);
+            P1.board[x][y]=randomRange(1,(globalNumColors-1));//because one color is reserved for garbage
+            P2.board[x][y]=randomRange(1,(globalNumColors-1));
         }
     }
 
@@ -203,27 +205,23 @@ void loadDebugFieldData()
 
 void initialize()
 {
-    P1.numColors=globalNumColors;
-    P2.numColors=P1.numColors;
+    //P1.numColors=globalNumColors;
+    //P2.numColors=P1.numColors;
 
     clearBoard(&P1);
     clearBoard(&P2);
 
-    P1.fallingPiece[0] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
-    P1.fallingPiece[1] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
-    P1.fallingPiece[2] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
+    for (u8 createIndex=0;createIndex<3;createIndex++)
+    {
+        P1.fallingPieceSprite[createIndex] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
+        P2.fallingPieceSprite[createIndex] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
 
-    P2.fallingPiece[0] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
-    P2.fallingPiece[1] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
-    P2.fallingPiece[2] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
+        SPR_setVisibility(P1.fallingPieceSprite[createIndex],HIDDEN);
+        SPR_setVisibility(P2.fallingPieceSprite[createIndex],HIDDEN);
 
-    SPR_setVisibility(P1.fallingPiece[0],HIDDEN);
-    SPR_setVisibility(P1.fallingPiece[1],HIDDEN);
-    SPR_setVisibility(P1.fallingPiece[2],HIDDEN);
-
-    SPR_setVisibility(P2.fallingPiece[0],HIDDEN);
-    SPR_setVisibility(P2.fallingPiece[1],HIDDEN);
-    SPR_setVisibility(P2.fallingPiece[2],HIDDEN);
+        P1.nextPiece[createIndex]=randomRange(1,(globalNumColors-1));
+        P2.nextPiece[createIndex]=P1.nextPiece[createIndex];//this doesn't work to give them the same color to start
+    }
 
     P1.flag_status=needPiece;
     P2.flag_status=needPiece;

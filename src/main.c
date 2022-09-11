@@ -10,6 +10,13 @@ void handleInput(Player* player, u16 buttons);
 bool collisionTest(Player* player, u8 direction);
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY);
 
+void setSharedNext();
+void drawSharedNext();
+void drawPlayerNext(Player* player);
+
+u8 sharedNext[fallingPieceNumberOfTiles];
+u8 sharedNextStatus;
+
 int main()
 {
     VDP_clearPlane(BG_B,TRUE);
@@ -33,6 +40,10 @@ int main()
     SPR_init();
 
     initialize();
+
+    setSharedNext();
+    drawPlayerNext(&P1);
+    drawPlayerNext(&P2);
 
     //loadDebugFieldData();
     //printBoard(&P1, 1,1,maxX+1,maxY+1);
@@ -74,8 +85,14 @@ int main()
             P2.flag_status=nothing;
         }
 
+        if(sharedNextStatus==1)drawSharedNext(&P1);
+        else if(sharedNextStatus==2)drawSharedNext(&P2);
+
         drawFallingSprite(&P1);
         drawFallingSprite(&P2);
+
+        drawPlayerNext(&P1);//********WARNING
+        drawPlayerNext(&P2);//these need to be limited! to only when needed, not every frame!
 
         SPR_update();
 
@@ -107,6 +124,11 @@ void printDebug()
 
     //sprintf(debug_string,"P2:%d", P2.flag_status);
     //VDP_drawText(debug_string,25,5);
+
+    //sprintf(debug_string,"P1:%d,%d,%d", P1.fallingPiece[0],P1.fallingPiece[1],P1.fallingPiece[2]);
+    //VDP_drawText(debug_string,2,1);
+    //sprintf(debug_string,"Pre:%d,%d,%d", P1.nextPiece[0],P1.nextPiece[1],P1.nextPiece[2]);
+    //VDP_drawText(debug_string,1,2);
 }
 
 void createPiece(Player* player)
@@ -117,8 +139,10 @@ void createPiece(Player* player)
 
     for (u8 createIndex=0;createIndex<3;createIndex++)
     {
-        player->newPiece[createIndex]=randomRange(1,player->numColors);//this is assigning color
-        SPR_setFrame(player->fallingPiece[createIndex],player->newPiece[createIndex]-1);
+        player->fallingPiece[createIndex]=player->nextPiece[createIndex];//this is assigning color
+        SPR_setFrame(player->fallingPieceSprite[createIndex],player->fallingPiece[createIndex]-1);
+
+        player->nextPiece[createIndex]=sharedNext[createIndex];
     }
 
     player->xPosition=4;
@@ -126,6 +150,8 @@ void createPiece(Player* player)
     player->moveDelay=0;
 
     player->flag_status=redraw;
+
+    setSharedNext();
 }
 
 void manageFalling(Player* player)
@@ -196,13 +222,13 @@ void handleInput(Player* player, u16 buttons)
 
 void pieceIntoBoard(Player* player)
 {
-    player->board[player->xPosition][player->yPosition]=player->newPiece[0];
-    player->board[player->xPosition][player->yPosition-1]=player->newPiece[1];
-    player->board[player->xPosition][player->yPosition-2]=player->newPiece[2];
+    player->board[player->xPosition][player->yPosition]=player->fallingPiece[2];
+    player->board[player->xPosition][player->yPosition-1]=player->fallingPiece[1];
+    player->board[player->xPosition][player->yPosition-2]=player->fallingPiece[0];
 
-    SPR_setVisibility(player->fallingPiece[0],HIDDEN);
-    SPR_setVisibility(player->fallingPiece[1],HIDDEN);
-    SPR_setVisibility(player->fallingPiece[2],HIDDEN);
+    SPR_setVisibility(player->fallingPieceSprite[0],HIDDEN);
+    SPR_setVisibility(player->fallingPieceSprite[1],HIDDEN);
+    SPR_setVisibility(player->fallingPieceSprite[2],HIDDEN);
 
     player->drawStartX=player->xPosition;
     player->drawStartY=player->yPosition-2;
@@ -214,13 +240,13 @@ void pieceIntoBoard(Player* player)
 
 void drawFallingSprite(Player* player)
 {
-    SPR_setPosition(player->fallingPiece[0],player->spriteX,player->spriteY);
-    SPR_setPosition(player->fallingPiece[1],player->spriteX,player->spriteY-TILESIZE);
-    SPR_setPosition(player->fallingPiece[2],player->spriteX,player->spriteY-TILESIZE-TILESIZE);
+    SPR_setPosition(player->fallingPieceSprite[2],player->spriteX,player->spriteY);
+    SPR_setPosition(player->fallingPieceSprite[1],player->spriteX,player->spriteY-TILESIZE);
+    SPR_setPosition(player->fallingPieceSprite[0],player->spriteX,player->spriteY-TILESIZE-TILESIZE);
 
-    if(player->yPosition==1)SPR_setVisibility(player->fallingPiece[0],VISIBLE);
-    if(player->yPosition==2)SPR_setVisibility(player->fallingPiece[1],VISIBLE);
-    if(player->yPosition==3)SPR_setVisibility(player->fallingPiece[2],VISIBLE);
+    if(player->yPosition==1)SPR_setVisibility(player->fallingPieceSprite[2],VISIBLE);
+    if(player->yPosition==2)SPR_setVisibility(player->fallingPieceSprite[1],VISIBLE);
+    if(player->yPosition==3)SPR_setVisibility(player->fallingPieceSprite[0],VISIBLE);
 }
 
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, from top to bottom
@@ -241,8 +267,8 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     s8 drawPosX,drawPosY;
     u8 i;
 
-    u8 yOddAdder=0;
-    if((startY&1)!=0)yOddAdder=1;
+    //u8 yOddAdder=0;
+    //if((startY&1)!=0)yOddAdder=1;
 
 //updown
     for (u8 updownX=startX;updownX<endX;updownX++)//u8 updownX=1 starts on updownX at 1, what happens if it's 2?
@@ -463,11 +489,11 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
         }
     }
 
-    u8 xOddAdder=0;
-    if((startX&1)==0)xOddAdder=1;
+    //u8 xOddAdder=0;
+    //if((startX&1)==0)xOddAdder=1;
 
-    u8 endXadder=0;
-    if(endX<=maxX)endXadder=1;
+    //u8 endXadder=0;
+    //if(endX<=maxX)endXadder=1;
 
 //leftright 
     for (u8 leftrightY=startY;leftrightY<endY;leftrightY++)
@@ -752,4 +778,47 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
         }
     }
 
+}
+
+void setSharedNext()
+{
+    for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
+    {
+        sharedNext[i]=randomRange(1,(globalNumColors-1));
+    }
+
+    sharedNextStatus=1;
+}
+
+void drawSharedNext()
+{
+    #define sharedNextxPos 19
+    u8 sharedNextyPos=7;
+    u8 colorAdd=0;
+
+    for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
+    {
+        //if(sharedNext[i]>1)colorAdd=(sharedNext[i]-1)<<2;//multiply by 4
+        colorAdd=(sharedNext[i]-1)<<2;//multiply by 4
+        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), sharedNextxPos, sharedNextyPos, 1, 1);
+        sharedNextyPos++;        
+    }
+
+    sharedNextStatus=0;
+}
+
+void drawPlayerNext(Player* player)
+{
+    u8 playerNextxPos=16;
+    if(player==&P2)playerNextxPos=22;
+    u8 playerNextyPos=4;
+    u8 colorAdd=0;
+
+    for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
+    {
+        //if(player->nextPiece[i]>1)colorAdd=(player->nextPiece[i]-1)<<2;//multiply by 4
+        colorAdd=(player->nextPiece[i]-1)<<2;//multiply by 4
+        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos, playerNextyPos, 1, 1);
+        playerNextyPos++;        
+    }
 }
