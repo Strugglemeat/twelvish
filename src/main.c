@@ -9,16 +9,7 @@ void handleInput(Player* player, u16 buttons);
 bool collisionTest(Player* player, u8 direction);
 void pieceIntoBoard(Player* player);
 
-void setSharedNext();
-void drawSharedNext();
-void drawPlayerNext(Player* player);
-
-u8 sharedNext[fallingPieceNumberOfTiles];
-u8 sharedNextStatus;
-
 void checkMatches(Player* player);
-
-void doRotate(Player* player, u8 direction);
 
 int main()
 {
@@ -242,47 +233,6 @@ void handleInput(Player* player, u16 buttons)
     if(!(buttons & BUTTON_B))player->has_let_go_B=true;
 }
 
-void setSharedNext()
-{
-    for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
-    {
-        sharedNext[i]=randomRange(1,(globalNumColors-1));
-    }
-
-    sharedNextStatus=1;
-}
-
-void drawSharedNext()
-{
-    #define sharedNextxPos 19
-    u8 sharedNextyPos=7;
-    u8 colorAdd=0;
-
-    for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
-    {
-        colorAdd=(sharedNext[i]-1)<<2;//multiply by 4
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), sharedNextxPos, sharedNextyPos, 1, 1);
-        sharedNextyPos++;        
-    }
-
-    sharedNextStatus=0;
-}
-
-void drawPlayerNext(Player* player)
-{
-    u8 playerNextxPos=16;
-    if(player==&P2)playerNextxPos=22;
-    u8 playerNextyPos=4;
-    u8 colorAdd=0;
-
-    for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
-    {
-        colorAdd=(player->nextPiece[i]-1)<<2;//multiply by 4
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos, playerNextyPos, 1, 1);
-        playerNextyPos++;        
-    }
-}
-
 void pieceIntoBoard(Player* player)
 {
     player->board[player->xPosition][player->yPosition]=player->fallingPiece[2];
@@ -305,34 +255,44 @@ void pieceIntoBoard(Player* player)
 
 void checkMatches(Player* player)
 {
+    u8 connectionAmount,connectionColor;
+
     u8 checkX=1;
     for (u8 checkY=maxY;checkY>0;checkY--)
     {
         if(player->board[checkX][checkY]!=0)
         {
-            if(player->board[checkX][checkY]==player->board[checkX+1][checkY])
+            if(player->board[checkX][checkY]==player->board[checkX+1][checkY])//match laterally 2 tiles
             {
-                //match laterally 2 tiles
-                sprintf(debug_string,"matched 2 laterally");
-                VDP_drawText(debug_string,1,2);
+                connectionAmount=2;
+                connectionColor=player->board[checkX][checkY];
+                for (u8 advance=checkX+2;advance<maxX+1;advance++)
+                {
+                    if(player->board[advance][checkY]==connectionColor)connectionAmount++;
+                }
+                if(connectionAmount>=3)
+                {
+                    sprintf(debug_string,"matched %d laterally",connectionAmount);
+                    VDP_drawText(debug_string,1,2);                    
+                }
             }
             if(player->board[checkX][checkY]==player->board[checkX+1][checkY-1])
             {
                 //match diag up 2 tiles
-                sprintf(debug_string,"matched 2 diag up");
-                VDP_drawText(debug_string,1,2);
+                //sprintf(debug_string,"matched 2 diag up");
+                //VDP_drawText(debug_string,1,2);
             }
             if(player->board[checkX][checkY]==player->board[checkX+1][checkY+1])
             {
                 //match diag down 2 tiles
-                sprintf(debug_string,"matched 2 diag down");
-                VDP_drawText(debug_string,1,2);
+                //sprintf(debug_string,"matched 2 diag down");
+                //VDP_drawText(debug_string,1,2);
             }
             if(player->board[checkX][checkY]==player->board[checkX][checkY-1])
             {
                 //match down 2 tiles
-                sprintf(debug_string,"matched 2 downwards");
-                VDP_drawText(debug_string,1,2);
+                //sprintf(debug_string,"matched 2 downwards");
+                //VDP_drawText(debug_string,1,2);
             }
         }
         else if(player->board[checkX][checkY]==0)
@@ -340,28 +300,6 @@ void checkMatches(Player* player)
             checkX++;
             checkY=maxY;
         }
-        if(checkX==maxX)break;
+        if(checkX==maxX+1)break;
     }
-}
-
-void doRotate(Player* player, u8 direction)
-{
-    u8 tempPieceHolder;
-
-    if(direction==DOWN)
-    {
-        tempPieceHolder=player->fallingPiece[0];
-        player->fallingPiece[0]=player->fallingPiece[2];
-        player->fallingPiece[2]=player->fallingPiece[1];
-        player->fallingPiece[1]=tempPieceHolder;
-    }
-    else if(direction==UP)
-    {
-        tempPieceHolder=player->fallingPiece[0];
-        player->fallingPiece[0]=player->fallingPiece[1];
-        player->fallingPiece[1]=player->fallingPiece[2];
-        player->fallingPiece[2]=tempPieceHolder;
-    }
-
-    for (u8 spriteIndex=0;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
 }

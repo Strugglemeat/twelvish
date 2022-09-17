@@ -43,7 +43,14 @@ void drawFallingSprite(Player* player);
 void printBoardAll();
 void drawTile(Player* player, u8 xPos, u8 yPos);
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY);
+void doRotate(Player* player, u8 direction);
 
+void setSharedNext();
+void drawSharedNext();
+void drawPlayerNext(Player* player);
+
+u8 sharedNext[fallingPieceNumberOfTiles];
+u8 sharedNextStatus;
 char debug_string[40] = "";
 
 #define TILESIZE 12
@@ -844,4 +851,67 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
             tileIncrementer++;
         }
     }
+}
+
+void setSharedNext()
+{
+    for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
+    {
+        sharedNext[i]=randomRange(1,(globalNumColors-1));
+    }
+
+    sharedNextStatus=1;
+}
+
+void drawSharedNext()
+{
+    #define sharedNextxPos 19
+    u8 sharedNextyPos=7;
+    u8 colorAdd=0;
+
+    for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
+    {
+        colorAdd=(sharedNext[i]-1)<<2;//multiply by 4
+        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), sharedNextxPos, sharedNextyPos, 1, 1);
+        sharedNextyPos++;        
+    }
+
+    sharedNextStatus=0;
+}
+
+void drawPlayerNext(Player* player)
+{
+    u8 playerNextxPos=16;
+    if(player==&P2)playerNextxPos=22;
+    u8 playerNextyPos=4;
+    u8 colorAdd=0;
+
+    for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
+    {
+        colorAdd=(player->nextPiece[i]-1)<<2;//multiply by 4
+        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos, playerNextyPos, 1, 1);
+        playerNextyPos++;        
+    }
+}
+
+void doRotate(Player* player, u8 direction)
+{
+    u8 tempPieceHolder;
+
+    if(direction==DOWN)
+    {
+        tempPieceHolder=player->fallingPiece[0];
+        player->fallingPiece[0]=player->fallingPiece[2];
+        player->fallingPiece[2]=player->fallingPiece[1];
+        player->fallingPiece[1]=tempPieceHolder;
+    }
+    else if(direction==UP)
+    {
+        tempPieceHolder=player->fallingPiece[0];
+        player->fallingPiece[0]=player->fallingPiece[1];
+        player->fallingPiece[1]=player->fallingPiece[2];
+        player->fallingPiece[2]=tempPieceHolder;
+    }
+
+    for (u8 spriteIndex=0;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
 }
