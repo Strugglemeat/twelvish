@@ -3,6 +3,13 @@
 typedef struct {
 
     u8 board[9][18];//7 wide by 16 tall. [0][0] not used. array is [9] because [8] gets fucky with the inner tiles
+    bool boardDestructionQueue[9][18];
+
+    bool flag_destroy;
+    bool flag_gravity;
+    bool flag_checkmatches;
+    bool flag_redraw;
+
     u8 flag_status;
 
     Sprite* fallingPieceSprite[fallingPieceNumberOfTiles];
@@ -11,8 +18,6 @@ typedef struct {
     u16 spriteX;
     s16 spriteY;
     u8 xPosition,yPosition;
-
-    //u8 numColors;
 
     u8 leftright[4][16];
     u8 updown[7][8];
@@ -72,9 +77,8 @@ char debug_string[40] = "";
 enum status
 {
     nothing,
-    redraw,
     needPiece,
-    toppedOut
+    toppedOut,
 };
 
 enum direction
@@ -254,9 +258,11 @@ void initialize()
 void drawTile(Player* player, u8 xPos, u8 yPos)//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
 {
     u8 colorAdd=0;//4 tiles for each color. so color 2 is adding 4, color 3 is adding 8
+    bool flag_erase=false;
 
     //if we are drawing a tile other than color 1, we need to increase the tile index    
     if(player->board[xPos][yPos]>1)colorAdd=(player->board[xPos][yPos]-1)<<2;//multiply by 4
+    else if(player->board[xPos][yPos]==0)flag_erase=true;
 
     u8 p2offsetX=0;
     if(player==&P2)p2offsetX=player2offset;
@@ -264,53 +270,101 @@ void drawTile(Player* player, u8 xPos, u8 yPos)//TILE_ATTR_FULL(pal, prio, flipV
     u8 drawingxPos=xPos+(xPos>>1)+p2offsetX;
     u8 drawingyPos=yPos+(yPos>>1);
 
-    if(xPos%2!=0 && yPos%2!=0)//odd column, odd row (1,1)
+    if(flag_erase==false)
     {
-        //top left: bottom half
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-        //top right: bottom left corner
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 4+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);
-        //bottom left: full square
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
-        //bottom right: left half
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);
+        if(xPos%2!=0 && yPos%2!=0)//odd column, odd row (1,1)
+        {
+            //top left: bottom half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
+            //top right: bottom left corner
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 4+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);
+            //bottom left: full square
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
+            //bottom right: left half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);
+        }
+        else if(xPos%2==0 && yPos%2!=0)//even column, odd row (2,1)
+        {
+            //top left: bottom right corner
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 4+colorAdd), drawingxPos+xOffset-1, drawingyPos+yOffset-1, 1, 1);
+            //top right: bottom half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
+            //bottom left: right half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+colorAdd), drawingxPos+xOffset-1, drawingyPos+yOffset, 1, 1);
+            //bottom right: full square
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
+        }
+        else if(xPos%2!=0 && yPos%2==0)//odd column, even row (1,2)
+        {
+            //top left: full square
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
+            //top right: left half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);
+            //bottom left: top half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
+            //bottom right: top left corner
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, TRUE, 4+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);//was FALSE,TRUE,5
+        }
+        else if(xPos%2==0 && yPos%2==0)//even column, even row (2,2)
+        {
+            //top left: right half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+colorAdd), drawingxPos+xOffset-1, drawingyPos+yOffset-1, 1, 1);
+            //top right: full square
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
+            //bottom left: top right corner
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 4+colorAdd), drawingxPos+xOffset-1, drawingyPos+yOffset, 1, 1);//was FALSE,FALSE,5
+            //bottom right: top half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
+        }
     }
-    else if(xPos%2==0 && yPos%2!=0)//even column, odd row (2,1)
+    else if(flag_erase==true)
     {
-        //top left: bottom right corner
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 4+colorAdd), drawingxPos+xOffset-1, drawingyPos+yOffset-1, 1, 1);
-        //top right: bottom half
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-        //bottom left: right half
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+colorAdd), drawingxPos+xOffset-1, drawingyPos+yOffset, 1, 1);
-        //bottom right: full square
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
-    }
-    else if(xPos%2!=0 && yPos%2==0)//odd column, even row (1,2)
-    {
-        //top left: full square
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-        //top right: left half
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);
-        //bottom left: top half
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
-        //bottom right: top left corner
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, TRUE, 4+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);//was FALSE,TRUE,5
-    }
-    else if(xPos%2==0 && yPos%2==0)//even column, even row (2,2)
-    {
-        //top left: right half
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+colorAdd), drawingxPos+xOffset-1, drawingyPos+yOffset-1, 1, 1);
-        //top right: full square
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-        //bottom left: top right corner
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 4+colorAdd), drawingxPos+xOffset-1, drawingyPos+yOffset, 1, 1);//was FALSE,FALSE,5
-        //bottom right: top half
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
+        if(xPos%2!=0 && yPos%2!=0)//odd column, odd row (1,1)
+        {
+            //top left: bottom half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
+            //top right: bottom left corner
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 0), drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);
+            //bottom left: full square
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
+            //bottom right: left half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 0), drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);
+        }
+        else if(xPos%2==0 && yPos%2!=0)//even column, odd row (2,1)
+        {
+            //top left: bottom right corner
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset-1, drawingyPos+yOffset-1, 1, 1);
+            //top right: bottom half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
+            //bottom left: right half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset-1, drawingyPos+yOffset, 1, 1);
+            //bottom right: full square
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
+        }
+        else if(xPos%2!=0 && yPos%2==0)//odd column, even row (1,2)
+        {
+            //top left: full square
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
+            //top right: left half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 0), drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);
+            //bottom left: top half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
+            //bottom right: top left corner
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, TRUE, 0), drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);//was FALSE,TRUE,5
+        }
+        else if(xPos%2==0 && yPos%2==0)//even column, even row (2,2)
+        {
+            //top left: right half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset-1, drawingyPos+yOffset-1, 1, 1);
+            //top right: full square
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
+            //bottom left: top right corner
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 0), drawingxPos+xOffset-1, drawingyPos+yOffset, 1, 1);//was FALSE,FALSE,5
+            //bottom right: top half
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
+        }
     }
 }
-
-
 
 void drawFallingSprite(Player* player)
 {
@@ -331,7 +385,8 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     {
         for(u8 yDraw=startY;yDraw<endY;yDraw++)
         {
-           if(player->board[xDraw][yDraw]!=0)drawTile(player, xDraw,yDraw);
+           drawTile(player, xDraw,yDraw);
+           //if(player->board[xDraw][yDraw]!=0)drawTile(player, xDraw,yDraw);
         }
     }
 

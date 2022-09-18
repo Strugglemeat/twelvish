@@ -10,6 +10,8 @@ bool collisionTest(Player* player, u8 direction);
 void pieceIntoBoard(Player* player);
 
 void checkMatches(Player* player);
+void processDestroy(Player* player);
+void processGravity(Player* player);
 
 int main()
 {
@@ -65,25 +67,38 @@ int main()
         if(collisionTest(&P2, BOTTOM)==false){}
         else pieceIntoBoard(&P2);
 
+        if(P1.flag_checkmatches==true)checkMatches(&P1);
+        if(P2.flag_checkmatches==true)checkMatches(&P2);
+
+        if(P1.flag_destroy==true)processDestroy(&P1);
+        if(P2.flag_destroy==true)processDestroy(&P2);
+
+        if(P1.flag_gravity==true)processGravity(&P1);
+        if(P2.flag_gravity==true)processGravity(&P2);
+
         if(P1.board[4][3]!=0)P1.flag_status=toppedOut;
         if(P2.board[4][3]!=0)P2.flag_status=toppedOut;
 
         SYS_doVBlankProcess();
         
-        if(P1.flag_status==redraw)
+        //if(P1.flag_status==redraw)
+        if(P1.flag_redraw==true)
         {
             printBoard(&P1, P1.drawStartX,P1.drawStartY,P1.drawEndX,P1.drawEndY);
             drawPlayerNext(&P1);
 
-            P1.flag_status=nothing;
+            //P1.flag_status=nothing;
+            P1.flag_redraw=false;
         }
 
-        if(P2.flag_status==redraw)
+        //if(P2.flag_status==redraw)
+        if(P2.flag_redraw==true)
         {
             printBoard(&P2, P2.drawStartX,P2.drawStartY,P2.drawEndX,P2.drawEndY);
             drawPlayerNext(&P2);
 
-            P2.flag_status=nothing;
+            //P2.flag_status=nothing;
+            P2.flag_redraw=false;
         }
 
         drawSharedNext();
@@ -126,6 +141,33 @@ void printDebug()
     //VDP_drawText(debug_string,2,1);
     //sprintf(debug_string,"Pre:%d,%d,%d", P1.nextPiece[0],P1.nextPiece[1],P1.nextPiece[2]);
     //VDP_drawText(debug_string,1,2);
+/*
+    if(P1.flag_status==needPiece)
+    {
+        for (u8 printBoardX=1;printBoardX<maxX+1;printBoardX++)
+        {
+            for (u8 printBoardY=6;printBoardY<maxY+1;printBoardY++)
+            {
+                sprintf(debug_string,"%d",P1.board[printBoardX][printBoardY]);
+                VDP_drawText(debug_string,printBoardX,printBoardY-3);
+            }
+        }
+    }
+*/
+/*
+    //if(P1.flag_destroy==true)
+    //if(1)
+    {
+        for (u8 printBoardX=1;printBoardX<maxX+1;printBoardX++)
+        {
+            for (u8 printBoardY=6;printBoardY<maxY+1;printBoardY++)
+            {
+                sprintf(debug_string,"%d",P1.boardDestructionQueue[printBoardX][printBoardY]);
+                VDP_drawText(debug_string,printBoardX+27,printBoardY-3);
+            }
+        }
+    }
+*/
 }
 
 void createPiece(Player* player)
@@ -146,9 +188,10 @@ void createPiece(Player* player)
     player->yPosition=ySpawn;
     player->moveDelay=0;
 
-    player->flag_status=redraw;
+    player->flag_status=nothing;
 
     setSharedNext();
+    drawPlayerNext(player);
 }
 
 void manageFalling(Player* player)
@@ -231,6 +274,18 @@ void handleInput(Player* player, u16 buttons)
 
     if(!(buttons & BUTTON_A))player->has_let_go_A=true;
     if(!(buttons & BUTTON_B))player->has_let_go_B=true;
+
+    if(buttons & BUTTON_C)//debug
+    {
+        for (u8 printBoardX=1;printBoardX<maxX+1;printBoardX++)
+            {
+                for (u8 printBoardY=9;printBoardY<maxY+1;printBoardY++)
+                {
+                    sprintf(debug_string,"%d",P1.board[printBoardX][printBoardY]);
+                    VDP_drawText(debug_string,printBoardX,printBoardY-6);
+                }
+            }
+    }
 }
 
 void pieceIntoBoard(Player* player)
@@ -250,56 +305,126 @@ void pieceIntoBoard(Player* player)
 
     player->flag_status=needPiece;
 
-    checkMatches(player);
+    player->flag_checkmatches=true;
+
+    player->flag_redraw=true;
 }
 
 void checkMatches(Player* player)
 {
     u8 connectionAmount,connectionColor;
 
-    u8 checkX=1;
-    for (u8 checkY=maxY;checkY>0;checkY--)
+    for (u8 checkX=1;checkX<maxX+1;checkX++)
     {
-        if(player->board[checkX][checkY]!=0)
+        for (u8 checkY=maxY+1;checkY>0;checkY--)
         {
-            if(player->board[checkX][checkY]==player->board[checkX+1][checkY])//match laterally 2 tiles
+            if(player->board[checkX][checkY]!=0)
             {
-                connectionAmount=2;
-                connectionColor=player->board[checkX][checkY];
-                for (u8 advance=checkX+2;advance<maxX+1;advance++)
+                if(player->board[checkX][checkY]==player->board[checkX+1][checkY])//match laterally 2 tiles
                 {
-                    if(player->board[advance][checkY]==connectionColor)connectionAmount++;
+                    connectionAmount=2;
+                    connectionColor=player->board[checkX][checkY];
+                    for (u8 advance=checkX+2;advance<maxX+1;advance++)
+                    {
+                        if(player->board[advance][checkY]==connectionColor)connectionAmount++;
+                        else if(player->board[advance][checkY]!=connectionColor)break;
+                    }
+                    if(connectionAmount>=3)
+                    {
+                        //sprintf(debug_string,"matched %d laterally starting at %d",connectionAmount,checkX);
+                        //VDP_drawText(debug_string,1,1);
+                        
+                        for (u8 xAddDestructionQueue=0;xAddDestructionQueue<connectionAmount;xAddDestructionQueue++)
+                        {
+                            player->boardDestructionQueue[checkX+xAddDestructionQueue][checkY]=true;
+                        }
+
+                        player->flag_destroy=true;
+                    }
                 }
-                if(connectionAmount>=3)
+                if(player->board[checkX][checkY]==player->board[checkX][checkY-1])//match vertically 2 tiles
                 {
-                    sprintf(debug_string,"matched %d laterally",connectionAmount);
-                    VDP_drawText(debug_string,1,2);                    
+
                 }
-            }
-            if(player->board[checkX][checkY]==player->board[checkX+1][checkY-1])
-            {
-                //match diag up 2 tiles
-                //sprintf(debug_string,"matched 2 diag up");
-                //VDP_drawText(debug_string,1,2);
-            }
-            if(player->board[checkX][checkY]==player->board[checkX+1][checkY+1])
-            {
-                //match diag down 2 tiles
-                //sprintf(debug_string,"matched 2 diag down");
-                //VDP_drawText(debug_string,1,2);
-            }
-            if(player->board[checkX][checkY]==player->board[checkX][checkY-1])
-            {
-                //match down 2 tiles
-                //sprintf(debug_string,"matched 2 downwards");
-                //VDP_drawText(debug_string,1,2);
+                if(player->board[checkX][checkY]==player->board[checkX+1][checkY-1])//match diagonally up 2 tiles
+                {
+
+                }
+                if(player->board[checkX][checkY]==player->board[checkX+1][checkY+1])//match diagonally down 2 tiles
+                {
+
+                }
+                else if(player->board[checkX][checkY]==0)break;//empty tile, leave
             }
         }
-        else if(player->board[checkX][checkY]==0)
-        {
-            checkX++;
-            checkY=maxY;
-        }
-        if(checkX==maxX+1)break;
     }
+
+    player->flag_checkmatches=false;
+}
+
+void processDestroy(Player* player)
+{
+    u8 howManyDestroyed=0;
+    u8 debug_firstX=0;
+
+    for (u8 destroyX=1;destroyX<maxX+1;destroyX++)
+    {
+        for (u8 destroyY=1;destroyY<maxY+1;destroyY++)
+        {
+            if (player->boardDestructionQueue[destroyX][destroyY]==true)
+            {
+                player->board[destroyX][destroyY]=0;
+                player->boardDestructionQueue[destroyX][destroyY]=false;
+                howManyDestroyed++;
+
+                if(debug_firstX==0)debug_firstX=destroyX;
+            }
+        }
+    }
+
+    player->flag_destroy=false;
+    player->flag_gravity=true;
+
+/*
+    if(howManyDestroyed>=3)
+    {
+        sprintf(debug_string,"destroyed %d starting at %d",howManyDestroyed,debug_firstX);
+        VDP_drawText(debug_string,1,2);
+    }
+*/
+}
+
+void processGravity(Player* player)
+{
+    //u8 debug_howMuchGravity=0;
+
+    for (u8 gravityY=maxY-1;gravityY>0;gravityY--)//don't need to start at maxY+1 cus there's no gravity for bottom tiles
+    {
+        for (u8 gravityX=1;gravityX<maxX+1;gravityX++)
+        {
+            if (player->board[gravityX][gravityY]!=0 && player->board[gravityX][gravityY+1]==0)
+            {
+                player->board[gravityX][gravityY+1]=player->board[gravityX][gravityY];
+                player->board[gravityX][gravityY]=0;
+
+                //debug_howMuchGravity++;
+            }
+            //else if(player->board[gravityX][gravityY]==0)break;
+        }
+    }
+
+    player->drawStartX=1;
+    player->drawStartY=1;
+    player->drawEndX=maxX+1;
+    player->drawEndY=maxY+1;
+    player->flag_redraw=true;
+
+    player->flag_gravity=false;
+/*
+    if(debug_howMuchGravity>0)
+    {
+        sprintf(debug_string,"gravity moved %d",debug_howMuchGravity);
+        VDP_drawText(debug_string,1,2);
+    }
+*/
 }
