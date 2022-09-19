@@ -918,10 +918,12 @@ void setSharedNext()
     sharedNextStatus=1;
 }
 
+#define nextPieceYPos 4
+
 void drawSharedNext()
 {
     #define sharedNextxPos 19
-    u8 sharedNextyPos=7;
+    u8 sharedNextyPos=nextPieceYPos;
     u8 colorAdd=0;
 
     for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
@@ -938,7 +940,7 @@ void drawPlayerNext(Player* player)
 {
     u8 playerNextxPos=16;
     if(player==&P2)playerNextxPos=22;
-    u8 playerNextyPos=4;
+    u8 playerNextyPos=nextPieceYPos;
     u8 colorAdd=0;
 
     for (u8 i=0;i<fallingPieceNumberOfTiles;i++)

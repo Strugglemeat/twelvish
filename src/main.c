@@ -67,6 +67,9 @@ int main()
         if(collisionTest(&P2, BOTTOM)==false){}
         else pieceIntoBoard(&P2);
 
+        if(P1.board[4][3]!=0)P1.flag_status=toppedOut;
+        if(P2.board[4][3]!=0)P2.flag_status=toppedOut;
+
         if(P1.flag_checkmatches==true)checkMatches(&P1);
         if(P2.flag_checkmatches==true)checkMatches(&P2);
 
@@ -76,28 +79,23 @@ int main()
         if(P1.flag_gravity==true)processGravity(&P1);
         if(P2.flag_gravity==true)processGravity(&P2);
 
-        if(P1.board[4][3]!=0)P1.flag_status=toppedOut;
-        if(P2.board[4][3]!=0)P2.flag_status=toppedOut;
-
         SYS_doVBlankProcess();
         
-        //if(P1.flag_status==redraw)
         if(P1.flag_redraw==true)
         {
             printBoard(&P1, P1.drawStartX,P1.drawStartY,P1.drawEndX,P1.drawEndY);
             drawPlayerNext(&P1);
 
-            //P1.flag_status=nothing;
             P1.flag_redraw=false;
+
+            //debugIncrementer++;
         }
 
-        //if(P2.flag_status==redraw)
         if(P2.flag_redraw==true)
         {
             printBoard(&P2, P2.drawStartX,P2.drawStartY,P2.drawEndX,P2.drawEndY);
             drawPlayerNext(&P2);
 
-            //P2.flag_status=nothing;
             P2.flag_redraw=false;
         }
 
@@ -122,8 +120,8 @@ void printDebug()
     //sprintf(debug_string,"P1 %d", P1.flag_status);
     //VDP_drawText(debug_string,32,1);
 
-    //sprintf(debug_string,"P1y:%d", P1.yPosition);
-    //VDP_drawText(debug_string,2,4);
+    sprintf(debug_string,"P1y:%d", P1.yPosition);
+    VDP_drawText(debug_string,2,4);
 
     //sprintf(debug_string,"P1x:%d", P1.xPosition);
     //VDP_drawText(debug_string,1,2);
@@ -135,6 +133,9 @@ void printDebug()
     }
 
     //sprintf(debug_string,"P2:%d", P2.flag_status);
+    //VDP_drawText(debug_string,25,5);
+
+    //sprintf(debug_string,"dInc:%d", debugIncrementer);
     //VDP_drawText(debug_string,25,5);
 
     //sprintf(debug_string,"P1:%d,%d,%d", P1.fallingPiece[0],P1.fallingPiece[1],P1.fallingPiece[2]);
@@ -277,6 +278,8 @@ void handleInput(Player* player, u16 buttons)
 
     if(buttons & BUTTON_C)//debug
     {
+        //processGravity(&P1);
+        
         for (u8 printBoardX=1;printBoardX<maxX+1;printBoardX++)
             {
                 for (u8 printBoardY=9;printBoardY<maxY+1;printBoardY++)
@@ -285,6 +288,7 @@ void handleInput(Player* player, u16 buttons)
                     VDP_drawText(debug_string,printBoardX,printBoardY-6);
                 }
             }
+        
     }
 }
 
@@ -397,16 +401,26 @@ void processDestroy(Player* player)
 void processGravity(Player* player)
 {
     //u8 debug_howMuchGravity=0;
+    u8 debugbreakYpos=3;
 
-    for (u8 gravityY=maxY-1;gravityY>0;gravityY--)//don't need to start at maxY+1 cus there's no gravity for bottom tiles
+    for (u8 gravityX=1;gravityX<maxX+1;gravityX++)
     {
-        for (u8 gravityX=1;gravityX<maxX+1;gravityX++)
+        //for (u8 gravityY=maxY-1;gravityY>0;gravityY--)//don't need to start at maxY+1 cus there's no gravity for bottom tiles
+        for (u8 gravityY=maxY-1;gravityY>0;gravityY--)//#define maxY 17
         {
-            if (player->board[gravityX][gravityY]!=0 && player->board[gravityX][gravityY+1]==0)
+            if(player->board[gravityX][gravityY]==0 && player->board[gravityX][gravityY-1]==0)
+                {
+                    sprintf(debug_string,"g brk@ %d,%d",gravityX,gravityY);
+                    VDP_drawText(debug_string,28,debugbreakYpos);
+                    debugbreakYpos++;
+                    break;
+                }
+            else if (player->board[gravityX][gravityY]!=0 && player->board[gravityX][gravityY+1]==0)
+            //if (player->board[gravityX][gravityY]!=0 && player->board[gravityX][gravityY+1]==0)
             {
                 player->board[gravityX][gravityY+1]=player->board[gravityX][gravityY];
                 player->board[gravityX][gravityY]=0;
-
+                
                 //debug_howMuchGravity++;
             }
             //else if(player->board[gravityX][gravityY]==0)break;
