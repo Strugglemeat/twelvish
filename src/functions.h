@@ -34,6 +34,8 @@ typedef struct {
 
     u8 drawStartX,drawStartY,drawEndX,drawEndY;
 
+    u8 chainAmount;
+
 } Player;
 
 Player P1;

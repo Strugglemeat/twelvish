@@ -301,6 +301,14 @@ void pieceIntoBoard(Player* player)
     player->flag_checkmatches=true;
 
     player->flag_redraw=true;
+
+    player->chainAmount=0;
+
+    sprintf(debug_string,"       ");//this is to clear out the combo text
+    VDP_drawText(debug_string,2,1);
+
+    sprintf(debug_string,"       ");//this is to clear out the chain text
+    VDP_drawText(debug_string,2,2);
 }
 
 void checkMatches(Player* player)
@@ -371,42 +379,64 @@ void checkMatches(Player* player)
 
                     connectionAmount=2;
                     connectionColor=player->board[checkX][checkY];
-                    /*
+                    
                     u8 incrementer=2;
 
                     for (u8 advance=checkY-2;(advance>0 && ((checkX+incrementer)<(maxX+1)));advance--)
-                    //for (u8 advance=checkY-1;advance>0;advance--)
                     {
                         if(player->board[checkX+incrementer][advance]==connectionColor)connectionAmount++;
                         else if(player->board[checkX+incrementer][advance]!=connectionColor)break;
+
                         incrementer++;
                     }
-
+                    
                     if(connectionAmount>=3)
                     {
                         //sprintf(debug_string,"matched %d diagUp starting at %d,%d",connectionAmount,checkX,checkY);
-                        //VDP_drawText(debug_string,1,1);
-                        incrementer=0;
+                        //VDP_drawText(debug_string,1,2);
                         
-                        for (u8 yAddDestructionQueue=0;yAddDestructionQueue<connectionAmount;yAddDestructionQueue++)
+                        for (u8 i=0;i<connectionAmount;i++)
                         {
-                            player->boardDestructionQueue[checkX+incrementer][checkY-incrementer]=true;
+                            player->boardDestructionQueue[checkX+i][checkY-i]=true;
                         
-                            //sprintf(debug_string,"diagUp clr %d,%d",checkX+xIncrement,checkY-yAddDestructionQueue);
-                            //VDP_drawText(debug_string,26,1+xIncrement);
-
-                            incrementer++;
+                            //sprintf(debug_string,"diagUp clr %d,%d",checkX+i,checkY-i);
+                            //VDP_drawText(debug_string,26,1+i);
                         }
 
                         player->flag_destroy=true;
                     }
-                */
+                
                 }
                 if(player->board[checkX][checkY]==player->board[checkX+1][checkY+1])//match diagonally down 2 tiles
                 {
                     connectionAmount=2;
                     connectionColor=player->board[checkX][checkY];
 
+                    u8 incrementer=2;
+
+                    for (u8 advance=checkY+2;(advance<maxY+1 && ((checkX+incrementer)<(maxX+1)));advance++)
+                    {
+                        if(player->board[checkX+incrementer][advance]==connectionColor)connectionAmount++;
+                        else if(player->board[checkX+incrementer][advance]!=connectionColor)break;
+
+                        incrementer++;
+                    }
+
+                    if(connectionAmount>=3)
+                    {
+                        //sprintf(debug_string,"matched %d diagDOWN starting at %d,%d",connectionAmount,checkX,checkY);
+                        //VDP_drawText(debug_string,1,2);
+                        
+                        for (u8 i=0;i<connectionAmount;i++)
+                        {
+                            player->boardDestructionQueue[checkX+i][checkY+i]=true;
+                        
+                            //sprintf(debug_string,"diagDOWN clr %d,%d",checkX+i,checkY+i);
+                            //VDP_drawText(debug_string,22,1+i);
+                        }
+
+                        player->flag_destroy=true;
+                    }
                 }
                 else if(player->board[checkX][checkY]==0)break;//empty tile, leave
             }
@@ -418,6 +448,7 @@ void checkMatches(Player* player)
 
 void processDestroy(Player* player)
 {
+    player->chainAmount++;
     u8 howManyDestroyed=0;
     //u8 debug_firstX=0;
 
@@ -439,19 +470,20 @@ void processDestroy(Player* player)
     player->flag_destroy=false;
     player->flag_gravity=true;
 
-
-    //if(howManyDestroyed>=3)
-    //{
+    if(howManyDestroyed>3)
+    {
         //sprintf(debug_string,"destroyed %d starting at %d",howManyDestroyed,debug_firstX);
-        //VDP_drawText(debug_string,1,1);
-    //}
+        sprintf(debug_string,"combo %d",howManyDestroyed);
+        VDP_drawText(debug_string,2,1);
+    }
+
+//    u8 drawStartX,drawStartY,drawEndX,drawEndY;
 
 }
 
 void processGravity(Player* player)
 {
-    //u8 debug_howMuchGravity=0;
-    //u8 debugbreakYpos=3;
+    u8 howMuchGravity=0;
 
     for (u8 gravityX=1;gravityX<maxX+1;gravityX++)
     {
@@ -462,9 +494,14 @@ void processGravity(Player* player)
                 player->board[gravityX][gravityY]=player->board[gravityX][gravityY-1];
                 player->board[gravityX][gravityY-1]=0;
 
+                //if(gravityX<=player->drawStartX)player->drawStartX=gravityX;
+                //if(gravityY<player->drawStartY)player->drawStartY=gravityY-1;
+                //if(gravityX>=player->drawEndX)player->drawEndX=gravityX;
+                //if(gravityY>player->drawEndY)player->drawEndY=gravityY;
+
                 gravityY=maxY+1;
 
-                //debug_howMuchGravity++;
+                howMuchGravity++;
             }
         }
     }
@@ -476,10 +513,18 @@ void processGravity(Player* player)
     player->flag_redraw=true;
 
     player->flag_gravity=false;
-/*
-    if(debug_howMuchGravity>0)
+
+    if(howMuchGravity!=0)player->flag_checkmatches=true;
+
+    if(player->chainAmount>1)
     {
-        sprintf(debug_string,"gravity moved %d",debug_howMuchGravity);
+        sprintf(debug_string,"chain:%d",player->chainAmount);
+        VDP_drawText(debug_string,2,2);
+    }
+/*
+    if(howMuchGravity>0)
+    {
+        sprintf(debug_string,"gravity moved %d",howMuchGravity);
         VDP_drawText(debug_string,1,2);
     }
 */
