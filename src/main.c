@@ -5,8 +5,6 @@
 void printDebug();
 void createPiece(Player* player);
 void manageFalling(Player* player);
-void handleInput(Player* player, u16 buttons);
-bool collisionTest(Player* player, u8 direction);
 void pieceIntoBoard(Player* player);
 
 void checkMatches(Player* player);
@@ -96,7 +94,7 @@ int main()
             P2.flag_redraw=false;
         }
 
-        drawSharedNext();
+        //drawSharedNext(); //moved to within drawPlayerNext
 
         drawFallingSprite(&P1);
         drawFallingSprite(&P2);
@@ -136,6 +134,10 @@ void printDebug()
 
     //sprintf(debug_string,"P2:%d", P2.flag_status);
     //VDP_drawText(debug_string,25,5);
+
+    VDP_clearTextBG(BG_A,16,10,12);//VDP_clearTextBG(VDPPlane plane, u16 x, u16 y, u16 w);
+    sprintf(debug_string,"P1:%lu", getTimer(0,false));
+    VDP_drawText(debug_string,13,10);
 
     //sprintf(debug_string,"dInc:%d", debugIncrementer);
     //VDP_drawText(debug_string,25,5);
@@ -194,90 +196,6 @@ void manageFalling(Player* player)
     }
 
     player->spriteY++;
-}
-
-bool collisionTest(Player* player, u8 direction)
-{
-    if(direction==LEFT)
-    {
-        if(player->board[player->xPosition-1][player->yPosition+1]!=0)return true;
-        if(player->xPosition <= 1)return true;
-    }
-
-    if(direction==RIGHT)
-    {
-        if(player->board[player->xPosition+1][player->yPosition+1]!=0)return true;
-        if(player->xPosition >= maxX)return true;
-    }
-    
-    if(direction==BOTTOM)
-    {
-        if(player->yPosition >= maxY) return true;
-        if(player->board[player->xPosition][player->yPosition+1]!=0) return true;
-    }
-
-    return false;
-}
-
-void handleInput(Player* player, u16 buttons)
-{
-    if(player->flag_status!=toppedOut)
-    {
-        if(buttons & BUTTON_LEFT && player->moveDelay==0 && collisionTest(player, LEFT)==FALSE)
-        {
-            player->xPosition--;
-            player->moveDelay=MOVE_DELAY_AMOUNT;
-            player->spriteX-=TILESIZE;
-        }
-        else if(buttons & BUTTON_RIGHT && player->moveDelay==0 && collisionTest(player, RIGHT)==FALSE)
-        {
-            player->xPosition++;
-            player->moveDelay=MOVE_DELAY_AMOUNT;
-            player->spriteX+=TILESIZE;
-        }
-
-        if (buttons & BUTTON_DOWN && player->fallDelay==0 && collisionTest(player, BOTTOM)==FALSE)
-        {
-            //player->fallingIncrement+=2;
-            //player->spriteY+=2;
-
-            player->yPosition++;
-            player->spriteY+=TILESIZE;
-
-            player->fallDelay=FALL_DELAY_AMOUNT;
-        }
-
-        if (buttons & BUTTON_B && player->rotateDelay==0 && player->has_let_go_B==true)
-        {
-            doRotate(player, DOWN);
-            player->rotateDelay=ROTATE_DELAY_AMOUNT;
-            player->has_let_go_B=false;
-        }
-        else if (buttons & BUTTON_A && player->rotateDelay==0 && player->has_let_go_A==true)
-        {
-            doRotate(player, UP);
-            player->rotateDelay=ROTATE_DELAY_AMOUNT;
-            player->has_let_go_A=false;
-        }
-
-        if(!(buttons & BUTTON_A))player->has_let_go_A=true;
-        if(!(buttons & BUTTON_B))player->has_let_go_B=true;
-    }
-
-    if(buttons & BUTTON_C)//debug
-    {
-        //processGravity(&P1);
-        
-        for (u8 printBoardX=1;printBoardX<maxX+1;printBoardX++)
-            {
-                for (u8 printBoardY=9;printBoardY<maxY+1;printBoardY++)
-                {
-                    sprintf(debug_string,"%d",P1.board[printBoardX][printBoardY]);
-                    VDP_drawText(debug_string,printBoardX,printBoardY-6);
-                }
-            }
-        
-    }
 }
 
 void pieceIntoBoard(Player* player)
@@ -441,6 +359,12 @@ void checkMatches(Player* player)
                 else if(player->board[checkX][checkY]==0)break;//empty tile, leave
             }
         }
+    }
+
+    if(player->flag_destroy==true)
+    {
+        if(player==&P1)getTimer(0,true);//restart p1 timer
+        else if(player==&P2)getTimer(1,true);
     }
 
     player->flag_checkmatches=false;

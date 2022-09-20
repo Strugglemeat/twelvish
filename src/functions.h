@@ -52,6 +52,9 @@ void drawTile(Player* player, u8 xPos, u8 yPos);
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY);
 void doRotate(Player* player, u8 direction);
 
+void handleInput(Player* player, u16 buttons);
+bool collisionTest(Player* player, u8 direction);
+
 void setSharedNext();
 void drawSharedNext();
 void drawPlayerNext(Player* player);
@@ -111,7 +114,7 @@ enum direction
 
 void loadTiles()
 {
-    VDP_loadFontData(tileset_Font_Namco.tiles, 96, CPU);
+    VDP_loadFontData(tileset_Font.tiles, 96, CPU);
     
     VDP_loadTileSet(fullblock_color1.tileset,1,CPU);
     VDP_loadTileSet(fullblock_color2.tileset,1+(ADDAMOUNT*1),CPU);
@@ -255,6 +258,9 @@ void initialize()
     P1.has_let_go_B=true;
     P2.has_let_go_A=true;
     P2.has_let_go_B=true;
+
+    startTimer(0);//p1
+    startTimer(1);//p2
 }
 
 void drawTile(Player* player, u8 xPos, u8 yPos)//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
@@ -951,6 +957,8 @@ void drawPlayerNext(Player* player)
         VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos, playerNextyPos, 1, 1);
         playerNextyPos++;        
     }
+
+    drawSharedNext();
 }
 
 void doRotate(Player* player, u8 direction)
@@ -973,4 +981,88 @@ void doRotate(Player* player, u8 direction)
     }
 
     for (u8 spriteIndex=0;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
+}
+
+void handleInput(Player* player, u16 buttons)
+{
+    if(player->flag_status!=toppedOut)
+    {
+        if(buttons & BUTTON_LEFT && player->moveDelay==0 && collisionTest(player, LEFT)==FALSE)
+        {
+            player->xPosition--;
+            player->moveDelay=MOVE_DELAY_AMOUNT;
+            player->spriteX-=TILESIZE;
+        }
+        else if(buttons & BUTTON_RIGHT && player->moveDelay==0 && collisionTest(player, RIGHT)==FALSE)
+        {
+            player->xPosition++;
+            player->moveDelay=MOVE_DELAY_AMOUNT;
+            player->spriteX+=TILESIZE;
+        }
+
+        if (buttons & BUTTON_DOWN && player->fallDelay==0 && collisionTest(player, BOTTOM)==FALSE)
+        {
+            //player->fallingIncrement+=2;
+            //player->spriteY+=2;
+
+            player->yPosition++;
+            player->spriteY+=TILESIZE;
+
+            player->fallDelay=FALL_DELAY_AMOUNT;
+        }
+
+        if (buttons & BUTTON_B && player->rotateDelay==0 && player->has_let_go_B==true)
+        {
+            doRotate(player, DOWN);
+            player->rotateDelay=ROTATE_DELAY_AMOUNT;
+            player->has_let_go_B=false;
+        }
+        else if (buttons & BUTTON_A && player->rotateDelay==0 && player->has_let_go_A==true)
+        {
+            doRotate(player, UP);
+            player->rotateDelay=ROTATE_DELAY_AMOUNT;
+            player->has_let_go_A=false;
+        }
+
+        if(!(buttons & BUTTON_A))player->has_let_go_A=true;
+        if(!(buttons & BUTTON_B))player->has_let_go_B=true;
+    }
+
+    if(buttons & BUTTON_C)//debug
+    {
+        //processGravity(&P1);
+        
+        for (u8 printBoardX=1;printBoardX<maxX+1;printBoardX++)
+            {
+                for (u8 printBoardY=9;printBoardY<maxY+1;printBoardY++)
+                {
+                    sprintf(debug_string,"%d",P1.board[printBoardX][printBoardY]);
+                    VDP_drawText(debug_string,printBoardX,printBoardY-6);
+                }
+            }
+        
+    }
+}
+
+bool collisionTest(Player* player, u8 direction)
+{
+    if(direction==LEFT)
+    {
+        if(player->board[player->xPosition-1][player->yPosition+1]!=0)return true;
+        if(player->xPosition <= 1)return true;
+    }
+
+    if(direction==RIGHT)
+    {
+        if(player->board[player->xPosition+1][player->yPosition+1]!=0)return true;
+        if(player->xPosition >= maxX)return true;
+    }
+    
+    if(direction==BOTTOM)
+    {
+        if(player->yPosition >= maxY) return true;
+        if(player->board[player->xPosition][player->yPosition+1]!=0) return true;
+    }
+
+    return false;
 }
