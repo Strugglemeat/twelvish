@@ -10,6 +10,12 @@ void pieceIntoBoard(Player* player);
 void checkMatches(Player* player);
 void processDestroy(Player* player);
 void processGravity(Player* player);
+void manageDelays();
+
+#define destroyDelay 48000
+#define P1destroyTimer 0
+#define P2destroyTimer 1
+#define topOutYpos 2
 
 int main()
 {
@@ -42,37 +48,41 @@ int main()
     //loadDebugFieldData();
     //printBoard(&P1, 1,1,maxX+1,maxY+1);
 
-    while(1)
+    while(P1.flag_status!=toppedOut && P2.flag_status!=toppedOut)
     {
-        if(P1.moveDelay>0)P1.moveDelay--;
-        if(P2.moveDelay>0)P2.moveDelay--;
+        manageDelays();
 
-        if(P1.fallDelay>0)P1.fallDelay--;
-        if(P2.fallDelay>0)P2.fallDelay--;
+        if(P1.flag_destroy==false && P1.flag_checkmatches==false)
+        {
+            if(P1.flag_status==needPiece)createPiece(&P1);
 
-        if(P1.rotateDelay>0)P1.rotateDelay--;
-        if(P2.rotateDelay>0)P2.rotateDelay--;
+            handleInput(&P1, JOY_readJoypad(JOY_1));
 
-        if(P1.flag_status==needPiece)createPiece(&P1);
-        if(P2.flag_status==needPiece)createPiece(&P2);
+            if(collisionTest(&P1, BOTTOM)==false){}
+            else pieceIntoBoard(&P1);
+        }
 
-        handleInput(&P1, JOY_readJoypad(JOY_1));
-        handleInput(&P2, JOY_readJoypad(JOY_2));
+        if(P2.flag_destroy==false && P2.flag_checkmatches==false)
+        {
+            if(P2.flag_status==needPiece)createPiece(&P2);
 
-        if(collisionTest(&P1, BOTTOM)==false){}
-        else pieceIntoBoard(&P1);
+            handleInput(&P2, JOY_readJoypad(JOY_2));
 
-        if(collisionTest(&P2, BOTTOM)==false){}
-        else pieceIntoBoard(&P2);
+            if(collisionTest(&P2, BOTTOM)==false){}
+            else pieceIntoBoard(&P2);
+        }
 
         if(P1.flag_checkmatches==true)checkMatches(&P1);
         if(P2.flag_checkmatches==true)checkMatches(&P2);
 
-        if(P1.flag_destroy==true)processDestroy(&P1);
-        if(P2.flag_destroy==true)processDestroy(&P2);
+        if(P1.flag_destroy==true && getTimer(P1destroyTimer,false)>destroyDelay)processDestroy(&P1);
+        if(P2.flag_destroy==true && getTimer(P2destroyTimer,false)>destroyDelay)processDestroy(&P2);
 
         if(P1.flag_gravity==true)processGravity(&P1);
         if(P2.flag_gravity==true)processGravity(&P2);
+
+        if(P1.board[4][topOutYpos]!=0 && P1.flag_destroy==false)P1.flag_status=toppedOut;
+        if(P2.board[4][topOutYpos]!=0 && P2.flag_destroy==false)P2.flag_status=toppedOut;
 
         SYS_doVBlankProcess();
         
@@ -93,8 +103,6 @@ int main()
 
             P2.flag_redraw=false;
         }
-
-        //drawSharedNext(); //moved to within drawPlayerNext
 
         drawFallingSprite(&P1);
         drawFallingSprite(&P2);
@@ -123,21 +131,21 @@ void printDebug()
 
     if(P1.flag_status==toppedOut)
     {
-        sprintf(debug_string,"P1 topped out");
+        sprintf(debug_string,"TOPPED OUT");
         VDP_drawText(debug_string,1,2);
     }
     if(P2.flag_status==toppedOut)
     {
-        sprintf(debug_string,"P2 topped out");
+        sprintf(debug_string,"TOPPED OUT");
         VDP_drawText(debug_string,27,2);
     }
 
     //sprintf(debug_string,"P2:%d", P2.flag_status);
     //VDP_drawText(debug_string,25,5);
 
-    VDP_clearTextBG(BG_A,16,10,12);//VDP_clearTextBG(VDPPlane plane, u16 x, u16 y, u16 w);
-    sprintf(debug_string,"P1:%lu", getTimer(0,false));
-    VDP_drawText(debug_string,13,10);
+    //VDP_clearTextBG(BG_A,16,8,12);//VDP_clearTextBG(VDPPlane plane, u16 x, u16 y, u16 w);
+    //sprintf(debug_string,"P1:%lu", getTimer(P1destroyTimer,false));
+    //VDP_drawText(debug_string,13,8);
 
     //sprintf(debug_string,"dInc:%d", debugIncrementer);
     //VDP_drawText(debug_string,25,5);
@@ -213,24 +221,30 @@ void pieceIntoBoard(Player* player)
     player->drawEndX=player->xPosition+1;
     player->drawEndY=player->yPosition+1;
 
-    if(player->board[4][3]==0)player->flag_status=needPiece;
-    else player->flag_status=toppedOut;
-    
+    //if(player->board[4][3]==0)player->flag_status=needPiece;
+    //else if(player->board[4][3]!=0)player->flag_status=toppedOut;
+    //this doesn't account for if they are clearing a piece that touches top
+    player->flag_status=needPiece;
+
     player->flag_checkmatches=true;
 
     player->flag_redraw=true;
 
-    player->chainAmount=0;
+    player->chainAmount=0;//reset chain counter
 
     sprintf(debug_string,"       ");//this is to clear out the combo text
     VDP_drawText(debug_string,2,1);
 
     sprintf(debug_string,"       ");//this is to clear out the chain text
     VDP_drawText(debug_string,2,2);
+
+    //for(u8 clearTextY=13;clearTextY<29;clearTextY++)VDP_clearTextBG(BG_A,13,clearTextY,18);
 }
 
 void checkMatches(Player* player)
 {
+    //for(u8 clearTextY=22;clearTextY<26;clearTextY++)VDP_clearTextBG(BG_A,13,clearTextY,16);//debug
+
     u8 connectionAmount,connectionColor;
 
     for (u8 checkX=1;checkX<maxX+1;checkX++)
@@ -252,8 +266,8 @@ void checkMatches(Player* player)
 
                     if(connectionAmount>=3)
                     {
-                        //sprintf(debug_string,"matched %d laterally starting at %d",connectionAmount,checkX);
-                        //VDP_drawText(debug_string,1,1);
+                        //sprintf(debug_string,"hori %d at %d,%d",connectionAmount,checkX,checkY);
+                        //VDP_drawText(debug_string,13,19);
                         
                         for (u8 xAddDestructionQueue=0;xAddDestructionQueue<connectionAmount;xAddDestructionQueue++)
                         {
@@ -269,7 +283,7 @@ void checkMatches(Player* player)
                     connectionColor=player->board[checkX][checkY];
 
                     //sprintf(debug_string,"init vert match at %d,%d",checkX,checkY);
-                    //VDP_drawText(debug_string,1,1);
+                    //VDP_drawText(debug_string,13,28);
 
                     for (u8 advance=checkY-2;advance>0;advance--)
                     {
@@ -279,8 +293,8 @@ void checkMatches(Player* player)
 
                     if(connectionAmount>=3)
                     {
-                        //sprintf(debug_string,"matched %d vertically starting at %d",connectionAmount,checkY);
-                        //VDP_drawText(debug_string,1,1);
+                        //sprintf(debug_string,"vert %d at %d,%d",connectionAmount,checkX,checkY);
+                        //VDP_drawText(debug_string,13,19);
                         
                         for (u8 yAddDestructionQueue=0;yAddDestructionQueue<connectionAmount;yAddDestructionQueue++)
                         {
@@ -293,7 +307,7 @@ void checkMatches(Player* player)
                 if(player->board[checkX][checkY]==player->board[checkX+1][checkY-1])//match diagonally up 2 tiles
                 {
                     //sprintf(debug_string,"init diagUp match at %d,%d",checkX,checkY);
-                    //VDP_drawText(debug_string,1,1);
+                    //VDP_drawText(debug_string,13,28);
 
                     connectionAmount=2;
                     connectionColor=player->board[checkX][checkY];
@@ -311,14 +325,14 @@ void checkMatches(Player* player)
                     if(connectionAmount>=3)
                     {
                         //sprintf(debug_string,"matched %d diagUp starting at %d,%d",connectionAmount,checkX,checkY);
-                        //VDP_drawText(debug_string,1,2);
+                        //VDP_drawText(debug_string,13,28);
                         
                         for (u8 i=0;i<connectionAmount;i++)
                         {
                             player->boardDestructionQueue[checkX+i][checkY-i]=true;
-                        
-                            //sprintf(debug_string,"diagUp clr %d,%d",checkX+i,checkY-i);
-                            //VDP_drawText(debug_string,26,1+i);
+
+                            //sprintf(debug_string,"diagUP %d,%d",checkX+i,checkY-i);
+                            //VDP_drawText(debug_string,13,19+i);
                         }
 
                         player->flag_destroy=true;
@@ -343,14 +357,14 @@ void checkMatches(Player* player)
                     if(connectionAmount>=3)
                     {
                         //sprintf(debug_string,"matched %d diagDOWN starting at %d,%d",connectionAmount,checkX,checkY);
-                        //VDP_drawText(debug_string,1,2);
+                        //VDP_drawText(debug_string,13,28);
                         
                         for (u8 i=0;i<connectionAmount;i++)
                         {
                             player->boardDestructionQueue[checkX+i][checkY+i]=true;
                         
-                            //sprintf(debug_string,"diagDOWN clr %d,%d",checkX+i,checkY+i);
-                            //VDP_drawText(debug_string,22,1+i);
+                            //sprintf(debug_string,"diagDOWN %d,%d",checkX+i,checkY+i);
+                            //VDP_drawText(debug_string,13,19+i);
                         }
 
                         player->flag_destroy=true;
@@ -363,11 +377,20 @@ void checkMatches(Player* player)
 
     if(player->flag_destroy==true)
     {
-        if(player==&P1)getTimer(0,true);//restart p1 timer
-        else if(player==&P2)getTimer(1,true);
+        if(player==&P1)getTimer(P1destroyTimer,true);//restart p1 timer
+        else if(player==&P2)getTimer(P2destroyTimer,true);//restart p2 timer
     }
 
     player->flag_checkmatches=false;
+
+/*
+    if(player->flag_destroy==false && player->board[4][3]!=0)
+    {
+        player->flag_status=toppedOut;
+        sprintf(debug_string,"TOPOUT:CHECKMATCHES");
+        VDP_drawText(debug_string,8,9);
+    }
+*/
 }
 
 void processDestroy(Player* player)
@@ -376,12 +399,17 @@ void processDestroy(Player* player)
     u8 howManyDestroyed=0;
     //u8 debug_firstX=0;
 
+    for(u8 clearTextY=13;clearTextY<17;clearTextY++)VDP_clearTextBG(BG_A,13,clearTextY,9);
+
     for (u8 destroyX=1;destroyX<maxX+1;destroyX++)
     {
         for (u8 destroyY=1;destroyY<maxY+1;destroyY++)
         {
             if (player->boardDestructionQueue[destroyX][destroyY]==true)
             {
+                //sprintf(debug_string,"%d,%d,%d",destroyX,destroyY,player->board[destroyX][destroyY]);
+                //VDP_drawText(debug_string,13,10+howManyDestroyed);
+
                 player->board[destroyX][destroyY]=0;
                 player->boardDestructionQueue[destroyX][destroyY]=false;
                 howManyDestroyed++;
@@ -397,12 +425,16 @@ void processDestroy(Player* player)
     if(howManyDestroyed>3)
     {
         //sprintf(debug_string,"destroyed %d starting at %d",howManyDestroyed,debug_firstX);
-        sprintf(debug_string,"combo %d",howManyDestroyed);
+        sprintf(debug_string,"COMBO:%d",howManyDestroyed);
         VDP_drawText(debug_string,2,1);
     }
 
 //    u8 drawStartX,drawStartY,drawEndX,drawEndY;
-
+/*
+    if(player->board[4][3]!=0)player->flag_status=toppedOut;
+    sprintf(debug_string,"TOPOUT:PROCESSDESTROY");
+    VDP_drawText(debug_string,8,8);
+*/
 }
 
 void processGravity(Player* player)
@@ -442,7 +474,7 @@ void processGravity(Player* player)
 
     if(player->chainAmount>1)
     {
-        sprintf(debug_string,"chain:%d",player->chainAmount);
+        sprintf(debug_string,"CHAIN:%d",player->chainAmount);
         VDP_drawText(debug_string,2,2);
     }
 /*
@@ -452,4 +484,16 @@ void processGravity(Player* player)
         VDP_drawText(debug_string,1,2);
     }
 */
+}
+
+void manageDelays()
+{
+    if(P1.moveDelay>0)P1.moveDelay--;
+    if(P2.moveDelay>0)P2.moveDelay--;
+
+    if(P1.fallDelay>0)P1.fallDelay--;
+    if(P2.fallDelay>0)P2.fallDelay--;
+
+    if(P1.rotateDelay>0)P1.rotateDelay--;
+    if(P2.rotateDelay>0)P2.rotateDelay--;
 }
