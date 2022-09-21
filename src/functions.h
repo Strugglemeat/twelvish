@@ -26,7 +26,7 @@ typedef struct {
     u8 fallingIncrement;
 
     u8 moveDelay;
-    u8 fallDelay;
+    //u8 fallDelay;
 
     u8 rotateDelay;
     u8 has_let_go_A;
@@ -58,6 +58,7 @@ bool collisionTest(Player* player, u8 direction);
 void setSharedNext();
 void drawSharedNext();
 void drawPlayerNext(Player* player);
+void createPiece(Player* player);
 
 u8 sharedNext[fallingPieceNumberOfTiles];
 u8 sharedNextStatus;
@@ -74,7 +75,7 @@ char debug_string[40] = "";
 #define ySpawn 0
 
 #define spriteXorigin 44
-#define spriteYorigin -24
+#define spriteYorigin -36//-24
 
 #define player2offset 27
 #define p2spriteXcreate (18*TILESIZE)
@@ -101,7 +102,7 @@ enum direction
 #define UP 1
 
 #define MOVE_DELAY_AMOUNT 6
-#define FALL_DELAY_AMOUNT 4
+//#define FALL_DELAY_AMOUNT 4
 #define ROTATE_DELAY_AMOUNT 8
 
 #define globalNumColors 6
@@ -983,67 +984,6 @@ void doRotate(Player* player, u8 direction)
     for (u8 spriteIndex=0;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
 }
 
-void handleInput(Player* player, u16 buttons)
-{
-    if(player->flag_status!=toppedOut)
-    {
-        if(buttons & BUTTON_LEFT && player->moveDelay==0 && collisionTest(player, LEFT)==FALSE)
-        {
-            player->xPosition--;
-            player->moveDelay=MOVE_DELAY_AMOUNT;
-            player->spriteX-=TILESIZE;
-        }
-        else if(buttons & BUTTON_RIGHT && player->moveDelay==0 && collisionTest(player, RIGHT)==FALSE)
-        {
-            player->xPosition++;
-            player->moveDelay=MOVE_DELAY_AMOUNT;
-            player->spriteX+=TILESIZE;
-        }
-
-        if (buttons & BUTTON_DOWN && player->fallDelay==0 && collisionTest(player, BOTTOM)==FALSE)
-        {
-            //player->fallingIncrement+=2;
-            //player->spriteY+=2;
-
-            player->yPosition++;
-            player->spriteY+=TILESIZE;
-
-            player->fallDelay=FALL_DELAY_AMOUNT;
-        }
-
-        if (buttons & BUTTON_B && player->rotateDelay==0 && player->has_let_go_B==true)
-        {
-            doRotate(player, DOWN);
-            player->rotateDelay=ROTATE_DELAY_AMOUNT;
-            player->has_let_go_B=false;
-        }
-        else if (buttons & BUTTON_A && player->rotateDelay==0 && player->has_let_go_A==true)
-        {
-            doRotate(player, UP);
-            player->rotateDelay=ROTATE_DELAY_AMOUNT;
-            player->has_let_go_A=false;
-        }
-
-        if(!(buttons & BUTTON_A))player->has_let_go_A=true;
-        if(!(buttons & BUTTON_B))player->has_let_go_B=true;
-    }
-
-    if(buttons & BUTTON_C)//debug
-    {
-        //processGravity(&P1);
-        
-        for (u8 printBoardX=1;printBoardX<maxX+1;printBoardX++)
-            {
-                for (u8 printBoardY=9;printBoardY<maxY+1;printBoardY++)
-                {
-                    sprintf(debug_string,"%d",P1.board[printBoardX][printBoardY]);
-                    VDP_drawText(debug_string,printBoardX,printBoardY-6);
-                }
-            }
-        
-    }
-}
-
 bool collisionTest(Player* player, u8 direction)
 {
     if(direction==LEFT)
@@ -1065,4 +1005,28 @@ bool collisionTest(Player* player, u8 direction)
     }
 
     return false;
+}
+
+void createPiece(Player* player)
+{
+    if(player==&P1)player->spriteX=spriteXorigin;
+    else if(player==&P2)player->spriteX=spriteXorigin+p2spriteXcreate;
+    player->spriteY=spriteYorigin+TILESIZE+TILESIZE+TILESIZE;
+
+    for (u8 createIndex=0;createIndex<3;createIndex++)
+    {
+        player->fallingPiece[createIndex]=player->nextPiece[createIndex];//this is assigning color
+        SPR_setFrame(player->fallingPieceSprite[createIndex],player->fallingPiece[createIndex]-1);
+
+        player->nextPiece[createIndex]=sharedNext[createIndex];
+    }
+
+    player->xPosition=4;
+    player->yPosition=ySpawn;
+    player->moveDelay=0;
+
+    player->flag_status=nothing;
+
+    setSharedNext();
+    drawPlayerNext(player);
 }
