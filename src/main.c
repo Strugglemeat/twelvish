@@ -12,7 +12,7 @@ void processGravity(Player* player);
 void manageDelays();
 void sendDamage(Player* player);
 
-#define destroyDelay 48000
+#define destroyDelay 42000
 #define topOutYpos 2
 #define lockingDelay 24000
 
@@ -424,7 +424,7 @@ void processDestroy(Player* player)
     player->flag_destroy=false;
     player->flag_gravity=true;
 
-    if(howManyDestroyed>3)
+    if(howManyDestroyed>3 && player==&P1)
     {
         //sprintf(debug_string,"destroyed %d starting at %d",howManyDestroyed,debug_firstX);
         sprintf(debug_string,"COMBO:%d",howManyDestroyed);
@@ -474,7 +474,7 @@ void processGravity(Player* player)
 
     if(howMuchGravity!=0)player->flag_checkmatches=true;
 
-    if(player->chainAmount>1)
+    if(player->chainAmount>1 && player==&P1)
     {
         sprintf(debug_string,"CHAIN:%d",player->chainAmount);
         VDP_drawText(debug_string,2,2);
@@ -526,9 +526,23 @@ void handleInput(Player* player, u16 buttons)
             //player->yPosition++;
             //player->spriteY+=TILESIZE;
 
-            manageFalling(player);
+            //manageFalling(player);
 
             //player->fallDelay=FALL_DELAY_AMOUNT;
+
+            #define holdDownFallAmount 2
+
+            if(player->fallingIncrement<TILESIZE-holdDownFallAmount)
+            {
+                player->fallingIncrement+=holdDownFallAmount;
+                player->spriteY+=holdDownFallAmount;
+            }
+
+            if(player->fallingIncrement>=TILESIZE)
+            {
+                player->yPosition++;
+                player->fallingIncrement=0;
+            }
         }
 
         if (buttons & BUTTON_B && player->rotateDelay==0 && player->has_let_go_B==true)
