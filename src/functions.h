@@ -39,6 +39,8 @@ typedef struct {
     u8 chainAmount;
 
     u8 damageToBeReceived;
+
+    s8 meter;
 } Player;
 
 Player P1;
@@ -76,6 +78,7 @@ char debug_string[40] = "";
 #define yOffset 1
 
 #define ySpawn 0
+#define topOutYpos 2
 
 #define spriteXorigin 44
 #define spriteYorigin -36//-24

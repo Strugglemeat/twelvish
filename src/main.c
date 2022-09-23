@@ -10,10 +10,10 @@ void checkMatches(Player* player);
 void processDestroy(Player* player);
 void processGravity(Player* player);
 void manageDelays();
-void sendDamage(Player* player);
+void sendDamage(Player* player, u8 amountDamageTaken);
+void drawMeter();
 
-#define destroyDelay 42000
-#define topOutYpos 2
+#define destroyDelay 36000
 #define lockingDelay 24000
 
 //PAL0
@@ -83,9 +83,6 @@ int main()
                         P1.flag_locking=false;
                     }
             }
-            //else pieceIntoBoard(&P1);
-            //we need to put in logic for checking P1fallLockingTimer. if it's at zero, pieceIntoBoard, otherwise nothing.
-            //but how/when do we reset P1fallLockingTimer ?
         }
 
         if(P2.flag_destroy==false && P2.flag_checkmatches==false)
@@ -95,11 +92,23 @@ int main()
             handleInput(&P2, JOY_readJoypad(JOY_2));
 
             if(collisionTest(&P2, BOTTOM)==false)manageFalling(&P2);
-            else pieceIntoBoard(&P2);
+            else if (P2.flag_locking==false)
+            {
+                P2.flag_locking=true;
+                getTimer(P2fallLockingTimer,true);
+            }
+            else if(P2.flag_locking==true)
+            {
+                if(getTimer(P2fallLockingTimer,false)>=lockingDelay)
+                    {
+                        pieceIntoBoard(&P2);
+                        P2.flag_locking=false;
+                    }
+            }
         }
 
-        if(P1.damageToBeReceived>0 && P1.flag_status==needPiece)sendDamage(&P1);
-        if(P2.damageToBeReceived>0 && P2.flag_status==needPiece)sendDamage(&P2);
+        if(P1.damageToBeReceived>0 && P1.flag_status==needPiece)sendDamage(&P1, P1.damageToBeReceived);
+        if(P2.damageToBeReceived>0 && P2.flag_status==needPiece)sendDamage(&P2, P2.damageToBeReceived);
 
         if(P1.flag_checkmatches==true)checkMatches(&P1);
         if(P2.flag_checkmatches==true)checkMatches(&P2);
@@ -117,10 +126,12 @@ int main()
         
         if(P1.flag_redraw==true)
         {
+            //if(P1.drawStartY==0)P1.drawStartY=1;
             printBoard(&P1, P1.drawStartX,P1.drawStartY,P1.drawEndX,P1.drawEndY);
             drawPlayerNext(&P1);
 
             P1.flag_redraw=false;
+            P1.drawStartY=maxY-1;
         }
 
         if(P2.flag_redraw==true)
@@ -136,6 +147,8 @@ int main()
 
         SPR_update();
 
+        drawMeter();
+
         printDebug();
     }
     
@@ -145,7 +158,7 @@ int main()
 void printDebug()
 {
     sprintf(debug_string,"%ld", SYS_getFPS());
-    VDP_drawText(debug_string,0,0);
+    VDP_drawText(debug_string,19,27);
 
     //sprintf(debug_string,"P1 %d", P1.flag_status);
     //VDP_drawText(debug_string,32,1);
@@ -393,9 +406,10 @@ void processDestroy(Player* player)
 {
     player->chainAmount++;
     u8 howManyDestroyed=0;
-    //u8 debug_firstX=0;
 
     //for(u8 clearTextY=13;clearTextY<17;clearTextY++)VDP_clearTextBG(BG_A,13,clearTextY,9);
+
+    u8 firstDestroyY=player->drawStartY;
 
     for (u8 destroyX=1;destroyX<maxX+1;destroyX++)
     {
@@ -416,7 +430,7 @@ void processDestroy(Player* player)
                 player->boardDestructionQueue[destroyX][destroyY]=false;
                 howManyDestroyed++;
 
-                //if(debug_firstX==0)debug_firstX=destroyX;
+                if(destroyY<firstDestroyY)firstDestroyY=destroyY;
             }
         }
     }
@@ -426,24 +440,31 @@ void processDestroy(Player* player)
 
     if(howManyDestroyed>3 && player==&P1)
     {
-        //sprintf(debug_string,"destroyed %d starting at %d",howManyDestroyed,debug_firstX);
         sprintf(debug_string,"COMBO:%d",howManyDestroyed);
         VDP_drawText(debug_string,2,1);
     }
 
-//    u8 drawStartX,drawStartY,drawEndX,drawEndY;
-/*
-    if(player->board[4][3]!=0)player->flag_status=toppedOut;
-    sprintf(debug_string,"TOPOUT:PROCESSDESTROY");
-    VDP_drawText(debug_string,8,8);
-*/
+// METER
+    player->meter++;//1 for the clear
+    if(howManyDestroyed>3)player->meter+=howManyDestroyed-3;//combo
+    if(player->chainAmount>1)player->meter+=(howManyDestroyed<<1);
+
+    if(player->meter>99)player->meter=99;
+// END METER
+
+//redrawing less
+    if(howManyDestroyed>=3)player->drawStartY=firstDestroyY-1;
 }
 
 void processGravity(Player* player)
 {
     u8 howMuchGravity=0;
 
+    //u8 endGravityX=0;
+    u8 firstGravityY=player->drawStartY;
+
     for (u8 gravityX=1;gravityX<maxX+1;gravityX++)
+    //for (u8 gravityX=maxX;gravityX>0;gravityX--)
     {
         for (u8 gravityY=maxY;gravityY>0;gravityY--)//#define maxY 17
         {
@@ -452,10 +473,11 @@ void processGravity(Player* player)
                 player->board[gravityX][gravityY]=player->board[gravityX][gravityY-1];
                 player->board[gravityX][gravityY-1]=0;
 
-                //if(gravityX<=player->drawStartX)player->drawStartX=gravityX;
-                //if(gravityY<player->drawStartY)player->drawStartY=gravityY-1;
-                //if(gravityX>=player->drawEndX)player->drawEndX=gravityX;
-                //if(gravityY>player->drawEndY)player->drawEndY=gravityY;
+                if(gravityY<firstGravityY)firstGravityY=gravityY;
+
+
+                //if(endGravityX==0)endGravityX=gravityX;
+                //if(firstGravityY==0)firstGravityY=gravityY;
 
                 gravityY=maxY+1;
 
@@ -464,15 +486,24 @@ void processGravity(Player* player)
         }
     }
 
+    //if(howMuchGravity>0)
+    //{
     player->drawStartX=1;
-    player->drawStartY=1;
+    player->drawStartY=firstGravityY-1;
+    //player->drawStartX=firstGravityX-1;
+    //player->drawStartY=1;
+    //if(firstGravityY<player->drawStartY)player->drawStartY=firstGravityY-1;
+    //player->drawEndX=maxX+1;
     player->drawEndX=maxX+1;
     player->drawEndY=maxY+1;
     player->flag_redraw=true;
 
+    player->flag_checkmatches=true;
+    //}
+
     player->flag_gravity=false;
 
-    if(howMuchGravity!=0)player->flag_checkmatches=true;
+    //if(howMuchGravity!=0)player->flag_checkmatches=true;
 
     if(player->chainAmount>1 && player==&P1)
     {
@@ -581,12 +612,12 @@ void handleInput(Player* player, u16 buttons)
     }
 }
 
-void sendDamage(Player* player)
+void sendDamage(Player* player, u8 amountDamageTaken)
 {
     u8 sendingX=1;
     u8 sendingY=0;
 
-    for(u8 damageAmount=0;damageAmount<player->damageToBeReceived;damageAmount++)
+    for(u8 damageAmount=0;damageAmount<amountDamageTaken;damageAmount++)
     {
         player->board[sendingX][sendingY]=6;
         sendingX++;
@@ -596,12 +627,18 @@ void sendDamage(Player* player)
                 sendingY++;
             }
     }
-    player->damageToBeReceived=0;
+    player->damageToBeReceived-=amountDamageTaken;
 
-    //player->drawStartX=1;
-    //player->drawStartY=1;
-    //player->drawEndX=maxX+1;
-    //player->drawEndY=maxY+1;
-    //player->flag_redraw=1;
     processGravity(player);
+}
+
+void drawMeter()
+{
+    #define meterYpos 1
+
+    sprintf(debug_string,"%d", P1.meter);
+    VDP_drawText(debug_string,1,meterYpos);
+
+    sprintf(debug_string,"%d", P2.meter);
+    VDP_drawText(debug_string,38,meterYpos);
 }
