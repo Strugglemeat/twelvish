@@ -110,8 +110,8 @@ int main()
         if(P1.flag_gravity==true)processGravity(&P1);
         if(P2.flag_gravity==true)processGravity(&P2);
 
-        if(P1.board[4][topOutYpos]!=0 && P1.flag_destroy==false)P1.flag_status=toppedOut;
-        if(P2.board[4][topOutYpos]!=0 && P2.flag_destroy==false)P2.flag_status=toppedOut;
+        if(P1.board[4][topOutYpos]!=0 && P1.flag_destroy==false && P1.flag_checkmatches==false)P1.flag_status=toppedOut;
+        if(P2.board[4][topOutYpos]!=0 && P2.flag_destroy==false && P2.flag_checkmatches==false)P2.flag_status=toppedOut;
 
         SYS_doVBlankProcess();
         
@@ -227,10 +227,10 @@ void pieceIntoBoard(Player* player)
 
     if(player==&P1)
     {
-        sprintf(debug_string,"       ");//this is to clear out the combo text
+        sprintf(debug_string,"        ");//this is to clear out the combo text
         VDP_drawText(debug_string,2,1);
 
-        sprintf(debug_string,"       ");//this is to clear out the chain text
+        sprintf(debug_string,"        ");//this is to clear out the chain text
         VDP_drawText(debug_string,2,2);
     }
 
