@@ -36,6 +36,7 @@ typedef struct {
 
     u8 chainAmount;
 
+    u8 damageToBeReceived;
 } Player;
 
 Player P1;
@@ -112,6 +113,14 @@ enum direction
 #define ADDAMOUNT4 16
 #define ADDAMOUNT5 20
 #define extra_tiles_start  (4 + (ADDAMOUNT*(globalNumColors-1)) + 1)
+
+enum timers
+{
+    P1destroyTimer,
+    P2destroyTimer,
+    P1fallLockingTimer,
+    P2fallLockingTimer
+};
 
 void loadTiles()
 {
@@ -931,7 +940,7 @@ void setSharedNext()
 
 void drawSharedNext()
 {
-    #define sharedNextxPos 19
+    #define sharedNextxPos 20
     u8 sharedNextyPos=nextPieceYPos;
     u8 colorAdd=0;
 
@@ -939,6 +948,8 @@ void drawSharedNext()
     {
         colorAdd=(sharedNext[i]-1)<<2;//multiply by 4
         VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), sharedNextxPos, sharedNextyPos, 1, 1);
+        //VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), sharedNextxPos-1, sharedNextyPos, 1, 1);
+        //VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), sharedNextxPos+1, sharedNextyPos, 1, 1);
         sharedNextyPos++;        
     }
 
@@ -947,8 +958,8 @@ void drawSharedNext()
 
 void drawPlayerNext(Player* player)
 {
-    u8 playerNextxPos=16;
-    if(player==&P2)playerNextxPos=22;
+    u8 playerNextxPos=15;
+    if(player==&P2)playerNextxPos+=10;
     u8 playerNextyPos=nextPieceYPos;
     u8 colorAdd=0;
 
@@ -956,6 +967,18 @@ void drawPlayerNext(Player* player)
     {
         colorAdd=(player->nextPiece[i]-1)<<2;//multiply by 4
         VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos, playerNextyPos, 1, 1);
+/*
+        if(player==&P1)
+        {
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos-1, playerNextyPos, 1, 1);
+            //VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos-2, playerNextyPos, 1, 1);
+        }
+        else if(player==&P2)
+        {
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos+1, playerNextyPos, 1, 1);
+            //VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos+2, playerNextyPos, 1, 1);
+        }
+*/
         playerNextyPos++;        
     }
 
@@ -990,12 +1013,16 @@ bool collisionTest(Player* player, u8 direction)
     {
         if(player->board[player->xPosition-1][player->yPosition+1]!=0)return true;
         if(player->xPosition <= 1)return true;
+
+        if(player->board[player->xPosition-1][player->yPosition]!=0 && player->yPosition==maxY)return true;//stop shifting at the bottom
     }
 
     if(direction==RIGHT)
     {
         if(player->board[player->xPosition+1][player->yPosition+1]!=0)return true;
         if(player->xPosition >= maxX)return true;
+        
+        if(player->board[player->xPosition+1][player->yPosition]!=0 && player->yPosition==maxY)return true;//stop shifting at the bottom
     }
     
     if(direction==BOTTOM)

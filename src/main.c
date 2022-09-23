@@ -10,11 +10,15 @@ void checkMatches(Player* player);
 void processDestroy(Player* player);
 void processGravity(Player* player);
 void manageDelays();
+void sendDamage(Player* player);
 
 #define destroyDelay 48000
-#define P1destroyTimer 0
-#define P2destroyTimer 1
 #define topOutYpos 2
+
+//PAL0
+//PAL1
+//PAL2
+//PAL3 - falling pieces (6), trans (1), 10 free
 
 int main()
 {
@@ -30,9 +34,15 @@ int main()
 
     VDP_setPalette(PAL3,fallingSingleAll.palette->data);
     
-    VDP_setTextPalette(PAL1);
+    VDP_setTextPalette(PAL3);
 
-    VDP_drawImageEx(BG_B,&gridbg,0x57E,0,0,TRUE,FALSE);//font uses symbols we might never need
+    VDP_drawImageEx(BG_B,&gridbg,0x57E,0,0,TRUE,TRUE);//font uses symbols we might never need
+
+    //VDP_setPalette(PAL2,monster.palette->data);
+    VDP_drawImageEx(BG_A,&monster,TILE_ATTR_FULL(PAL2, FALSE, FALSE, FALSE, endOfInnerSectionsVRAM),13,10,TRUE,TRUE);
+    VDP_drawImageEx(BG_A,&monster2,TILE_ATTR_FULL(PAL1, FALSE, FALSE, FALSE, endOfInnerSectionsVRAM+80),21,10,TRUE,TRUE);
+    //VDP_fillTileMapRectInc(BG_A, TILE_ATTR_FULL(PAL2, FALSE, FALSE, FALSE, endOfInnerSectionsVRAM), 21, 10, 6, 16);
+    //VDP_setTileMapDataRect(BG_A, &monster, 21, 10, 6, 16, 10, DMA);
 
     SYS_enableInts();
 
@@ -54,9 +64,9 @@ int main()
 
         if(P1.flag_destroy==false && P1.flag_checkmatches==false)
         {
-            if(P1.flag_status==needPiece)createPiece(&P1);
+            if(P1.flag_status==needPiece && P1.damageToBeReceived==0)createPiece(&P1);
 
-            handleInput(&P1, JOY_readJoypad(JOY_1));
+            if(P1.flag_status!=needPiece)handleInput(&P1, JOY_readJoypad(JOY_1));
 
             if(collisionTest(&P1, BOTTOM)==false)manageFalling(&P1);
             else pieceIntoBoard(&P1);
@@ -71,6 +81,9 @@ int main()
             if(collisionTest(&P2, BOTTOM)==false)manageFalling(&P2);
             else pieceIntoBoard(&P2);
         }
+
+        if(P1.damageToBeReceived>0 && P1.flag_status==needPiece)sendDamage(&P1);
+        if(P2.damageToBeReceived>0 && P2.flag_status==needPiece)sendDamage(&P2);
 
         if(P1.flag_checkmatches==true)checkMatches(&P1);
         if(P2.flag_checkmatches==true)checkMatches(&P2);
@@ -196,12 +209,15 @@ void pieceIntoBoard(Player* player)
 
     player->chainAmount=0;//reset chain counter
 
-    sprintf(debug_string,"       ");//this is to clear out the combo text
-    VDP_drawText(debug_string,2,1);
+    if(player==&P1)
+    {
+        sprintf(debug_string,"       ");//this is to clear out the combo text
+        VDP_drawText(debug_string,2,1);
 
-    sprintf(debug_string,"       ");//this is to clear out the chain text
-    VDP_drawText(debug_string,2,2);
-
+        sprintf(debug_string,"       ");//this is to clear out the chain text
+        VDP_drawText(debug_string,2,2);
+    }
+    
     //for(u8 clearTextY=13;clearTextY<29;clearTextY++)VDP_clearTextBG(BG_A,13,clearTextY,18);
 }
 
@@ -215,7 +231,7 @@ void checkMatches(Player* player)
     {
         for (u8 checkY=maxY+1;checkY>0;checkY--)
         {
-            if(player->board[checkX][checkY]!=0)
+            if(player->board[checkX][checkY]!=0 && player->board[checkX][checkY]!=globalNumColors)
             {
                 if(player->board[checkX][checkY]==player->board[checkX+1][checkY])//match laterally 2 tiles
                 {
@@ -363,7 +379,7 @@ void processDestroy(Player* player)
     u8 howManyDestroyed=0;
     //u8 debug_firstX=0;
 
-    for(u8 clearTextY=13;clearTextY<17;clearTextY++)VDP_clearTextBG(BG_A,13,clearTextY,9);
+    //for(u8 clearTextY=13;clearTextY<17;clearTextY++)VDP_clearTextBG(BG_A,13,clearTextY,9);
 
     for (u8 destroyX=1;destroyX<maxX+1;destroyX++)
     {
@@ -373,6 +389,12 @@ void processDestroy(Player* player)
             {
                 //sprintf(debug_string,"%d,%d,%d",destroyX,destroyY,player->board[destroyX][destroyY]);
                 //VDP_drawText(debug_string,13,10+howManyDestroyed);
+
+                //check the surrounding for garbage to be transformed
+                if(player->board[destroyX+1][destroyY]==6){player->board[destroyX+1][destroyY]=player->board[destroyX][destroyY];player->flag_checkmatches=true;}
+                if(player->board[destroyX][destroyY+1]==6){player->board[destroyX][destroyY+1]=player->board[destroyX][destroyY];player->flag_checkmatches=true;}
+                if(player->board[destroyX-1][destroyY]==6){player->board[destroyX-1][destroyY]=player->board[destroyX][destroyY];player->flag_checkmatches=true;}
+                if(player->board[destroyX][destroyY-1]==6){player->board[destroyX][destroyY-1]=player->board[destroyX][destroyY];player->flag_checkmatches=true;}
 
                 player->board[destroyX][destroyY]=0;
                 player->boardDestructionQueue[destroyX][destroyY]=false;
@@ -513,15 +535,43 @@ void handleInput(Player* player, u16 buttons)
     if(buttons & BUTTON_C)//debug
     {
         //processGravity(&P1);
-        
-        for (u8 printBoardX=1;printBoardX<maxX+1;printBoardX++)
-            {
-                for (u8 printBoardY=9;printBoardY<maxY+1;printBoardY++)
-                {
-                    sprintf(debug_string,"%d",P1.board[printBoardX][printBoardY]);
-                    VDP_drawText(debug_string,printBoardX,printBoardY-6);
-                }
-            }
-        
+
+        P1.damageToBeReceived=8;
     }
+    if(buttons & BUTTON_START)//debug
+    {
+        for (u8 printBoardX=1;printBoardX<maxX+1;printBoardX++)
+        {
+            for (u8 printBoardY=9;printBoardY<maxY+1;printBoardY++)
+            {
+                sprintf(debug_string,"%d",P1.board[printBoardX][printBoardY]);
+                VDP_drawText(debug_string,printBoardX,printBoardY-6);
+            }
+        }
+    }
+}
+
+void sendDamage(Player* player)
+{
+    u8 sendingX=1;
+    u8 sendingY=0;
+
+    for(u8 damageAmount=0;damageAmount<player->damageToBeReceived;damageAmount++)
+    {
+        player->board[sendingX][sendingY]=6;
+        sendingX++;
+        if(sendingX>7)
+            {
+                sendingX=1;
+                sendingY++;
+            }
+    }
+    player->damageToBeReceived=0;
+
+    //player->drawStartX=1;
+    //player->drawStartY=1;
+    //player->drawEndX=maxX+1;
+    //player->drawEndY=maxY+1;
+    //player->flag_redraw=1;
+    processGravity(player);
 }
