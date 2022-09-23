@@ -10,6 +10,8 @@ typedef struct {
     bool flag_checkmatches;
     bool flag_redraw;
 
+    bool flag_locking;
+
     u8 flag_status;
 
     Sprite* fallingPieceSprite[fallingPieceNumberOfTiles];
@@ -269,8 +271,11 @@ void initialize()
     P2.has_let_go_A=true;
     P2.has_let_go_B=true;
 
-    startTimer(0);//p1
-    startTimer(1);//p2
+    startTimer(P1destroyTimer);
+    startTimer(P2destroyTimer);
+
+    startTimer(P1fallLockingTimer);
+    startTimer(P2fallLockingTimer);
 }
 
 void drawTile(Player* player, u8 xPos, u8 yPos)//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)

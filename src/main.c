@@ -14,6 +14,7 @@ void sendDamage(Player* player);
 
 #define destroyDelay 48000
 #define topOutYpos 2
+#define lockingDelay 24000
 
 //PAL0
 //PAL1
@@ -69,7 +70,22 @@ int main()
             if(P1.flag_status!=needPiece)handleInput(&P1, JOY_readJoypad(JOY_1));
 
             if(collisionTest(&P1, BOTTOM)==false)manageFalling(&P1);
-            else pieceIntoBoard(&P1);
+            else if (P1.flag_locking==false)
+            {
+                P1.flag_locking=true;
+                getTimer(P1fallLockingTimer,true);
+            }
+            else if(P1.flag_locking==true)
+            {
+                if(getTimer(P1fallLockingTimer,false)>=lockingDelay)
+                    {
+                        pieceIntoBoard(&P1);
+                        P1.flag_locking=false;
+                    }
+            }
+            //else pieceIntoBoard(&P1);
+            //we need to put in logic for checking P1fallLockingTimer. if it's at zero, pieceIntoBoard, otherwise nothing.
+            //but how/when do we reset P1fallLockingTimer ?
         }
 
         if(P2.flag_destroy==false && P2.flag_checkmatches==false)
@@ -217,7 +233,7 @@ void pieceIntoBoard(Player* player)
         sprintf(debug_string,"       ");//this is to clear out the chain text
         VDP_drawText(debug_string,2,2);
     }
-    
+
     //for(u8 clearTextY=13;clearTextY<29;clearTextY++)VDP_clearTextBG(BG_A,13,clearTextY,18);
 }
 
