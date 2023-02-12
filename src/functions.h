@@ -1,7 +1,6 @@
 #define fallingPieceNumberOfTiles 3
 
 typedef struct {
-
     u8 board[9][18];//7 wide by 16 tall. [0][0] not used. array is [9] because [8] gets fucky with the inner tiles
     bool boardDestructionQueue[9][18];
 
@@ -11,6 +10,8 @@ typedef struct {
     bool flag_redraw;
 
     bool flag_locking;
+
+    bool flag_fastdrop;//added Jan 12 2023
 
     u8 flag_status;
 
@@ -28,7 +29,6 @@ typedef struct {
     u8 fallingIncrement;
 
     u8 moveDelay;
-    //u8 fallDelay;
 
     u8 rotateDelay;
     u8 has_let_go_A;
@@ -40,7 +40,7 @@ typedef struct {
 
     u8 damageToBeReceived;
 
-    s8 meter;
+    u8 meter;
 } Player;
 
 Player P1;
@@ -50,15 +50,17 @@ u8 randomRange(u8 rangeStart, u8 rangeEnd);
 void initialize();
 void loadTiles();
 void loadDebugFieldData();
+
 void clearBoard(Player* player);
 void drawFallingSprite(Player* player);
 void printBoardAll();
 void drawTile(Player* player, u8 xPos, u8 yPos);
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY);
-void doRotate(Player* player, u8 direction);
 
+void doRotate(Player* player, u8 direction);
 void handleInput(Player* player, u16 buttons);
 bool collisionTest(Player* player, u8 direction);
+void checkMatches(Player* player);
 
 void setSharedNext();
 void drawSharedNext();
@@ -86,15 +88,13 @@ char debug_string[40] = "";
 #define player2offset 27
 #define p2spriteXcreate (18*TILESIZE)
 
-enum status
-{
+enum status{
     nothing,
     needPiece,
     toppedOut,
 };
 
-enum direction
-{
+enum direction{
     TOP = 1,
     BOTTOM = 2,
     LEFT = 3,
@@ -108,10 +108,9 @@ enum direction
 #define UP 1
 
 #define MOVE_DELAY_AMOUNT 6
-//#define FALL_DELAY_AMOUNT 4
 #define ROTATE_DELAY_AMOUNT 8
 
-#define globalNumColors 6
+#define globalNumColors 6//this includes gray garbage color
 #define ADDAMOUNT 4
 #define ADDAMOUNT2 8
 #define ADDAMOUNT3 12
@@ -119,8 +118,7 @@ enum direction
 #define ADDAMOUNT5 20
 #define extra_tiles_start  (4 + (ADDAMOUNT*(globalNumColors-1)) + 1)
 
-enum timers
-{
+enum timers{
     P1destroyTimer,
     P2destroyTimer,
     P1fallLockingTimer,
@@ -204,7 +202,7 @@ void loadTiles()
 #define innerSectionsVRAM extra_tiles_start+30// 64 tiles worth of VRAM (32 per player)
 #define endOfInnerSectionsVRAM innerSectionsVRAM+64
 
-void clearBoard(Player* player)
+void clearBoard(Player* player)//only called at initialization
 {
     for (u8 boardX=1;boardX<maxX+1;boardX++)
     {
@@ -243,10 +241,16 @@ void loadDebugFieldData()
 */
 }
 
+Sprite* sharedNextSpawnCloud;
+
 void initialize()
 {
-    //P1.numColors=globalNumColors;
+    //P1.numColors=globalNumColors;//this would be used for having diff # of total colors for the players, but with only 5 max it doesn't make sense
     //P2.numColors=P1.numColors;
+
+    sharedNextSpawnCloud = SPR_addSpriteSafe(&cloud, -64, -64, TILE_ATTR(PAL0, TRUE, FALSE, FALSE));//TILE_ATTR(pal, prio, flipV, flipH)
+    SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
+    SPR_setPosition(sharedNextSpawnCloud,148,28);
 
     clearBoard(&P1);
     clearBoard(&P2);
@@ -398,9 +402,9 @@ void drawFallingSprite(Player* player)
     SPR_setPosition(player->fallingPieceSprite[1],player->spriteX,player->spriteY-TILESIZE);
     SPR_setPosition(player->fallingPieceSprite[0],player->spriteX,player->spriteY-TILESIZE-TILESIZE);
 
-    if(player->yPosition==1)SPR_setVisibility(player->fallingPieceSprite[2],VISIBLE);
-    if(player->yPosition==2)SPR_setVisibility(player->fallingPieceSprite[1],VISIBLE);
-    if(player->yPosition==3)SPR_setVisibility(player->fallingPieceSprite[0],VISIBLE);
+    if(player->yPosition==1)SPR_setVisibility(player->fallingPieceSprite[2],VISIBLE);//bottom piece
+    if(player->yPosition==2)SPR_setVisibility(player->fallingPieceSprite[1],VISIBLE);//middle piece
+    if(player->yPosition==3)SPR_setVisibility(player->fallingPieceSprite[0],VISIBLE);//top piece
 }
 
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, from top to bottom
@@ -934,8 +938,15 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     }
 }
 
+u8 globalSpawnCloudVisibilityTimer;//replace with SPR_getAnimationDone(sharedNextSpawnCloud) in later SGDK
+
 void setSharedNext()
 {
+//cloud sprite
+    SPR_setFrame(sharedNextSpawnCloud, 0);
+    SPR_setVisibility(sharedNextSpawnCloud,VISIBLE);
+    globalSpawnCloudVisibilityTimer=0;
+
     for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
     {
         sharedNext[i]=randomRange(1,(globalNumColors-1));
@@ -956,9 +967,7 @@ void drawSharedNext()
     {
         colorAdd=(sharedNext[i]-1)<<2;//multiply by 4
         VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), sharedNextxPos, sharedNextyPos, 1, 1);
-        //VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), sharedNextxPos-1, sharedNextyPos, 1, 1);
-        //VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), sharedNextxPos+1, sharedNextyPos, 1, 1);
-        sharedNextyPos++;        
+        sharedNextyPos++;
     }
 
     sharedNextStatus=0;
@@ -1064,4 +1073,156 @@ void createPiece(Player* player)
 
     setSharedNext();
     drawPlayerNext(player);
+}
+
+void checkMatches(Player* player)
+{
+    //for(u8 clearTextY=22;clearTextY<26;clearTextY++)VDP_clearTextBG(BG_A,13,clearTextY,16);//debug
+
+    u8 connectionAmount,connectionColor;
+
+    for (u8 checkX=1;checkX<maxX+1;checkX++)
+    {
+        for (u8 checkY=maxY+1;checkY>0;checkY--)
+        {
+            if(player->board[checkX][checkY]!=0 && player->board[checkX][checkY]!=globalNumColors)
+            {
+                if(player->board[checkX][checkY]==player->board[checkX+1][checkY])//match laterally 2 tiles
+                {
+                    connectionAmount=2;
+                    connectionColor=player->board[checkX][checkY];
+
+                    for (u8 advance=checkX+2;advance<maxX+1;advance++)
+                    {
+                        if(player->board[advance][checkY]==connectionColor)connectionAmount++;
+                        else if(player->board[advance][checkY]!=connectionColor)break;
+                    }
+
+                    if(connectionAmount>=3)
+                    {
+                        //sprintf(debug_string,"hori %d at %d,%d",connectionAmount,checkX,checkY);
+                        //VDP_drawText(debug_string,13,19);
+                        
+                        for (u8 xAddDestructionQueue=0;xAddDestructionQueue<connectionAmount;xAddDestructionQueue++)
+                        {
+                            player->boardDestructionQueue[checkX+xAddDestructionQueue][checkY]=true;
+                        }
+
+                        player->flag_destroy=true;
+                    }
+                }
+                if(player->board[checkX][checkY]==player->board[checkX][checkY-1])//match vertically 2 tiles
+                {
+                    connectionAmount=2;
+                    connectionColor=player->board[checkX][checkY];
+
+                    //sprintf(debug_string,"init vert match at %d,%d",checkX,checkY);
+                    //VDP_drawText(debug_string,13,28);
+
+                    for (u8 advance=checkY-2;advance>0;advance--)
+                    {
+                        if(player->board[checkX][advance]==connectionColor)connectionAmount++;
+                        else if(player->board[checkX][advance]!=connectionColor)break;
+                    }
+
+                    if(connectionAmount>=3)
+                    {
+                        //sprintf(debug_string,"vert %d at %d,%d",connectionAmount,checkX,checkY);
+                        //VDP_drawText(debug_string,13,19);
+                        
+                        for (u8 yAddDestructionQueue=0;yAddDestructionQueue<connectionAmount;yAddDestructionQueue++)
+                        {
+                            player->boardDestructionQueue[checkX][checkY-yAddDestructionQueue]=true;
+                        }
+
+                        player->flag_destroy=true;
+                    }
+                }
+                if(player->board[checkX][checkY]==player->board[checkX+1][checkY-1])//match diagonally up 2 tiles
+                {
+                    //sprintf(debug_string,"init diagUp match at %d,%d",checkX,checkY);
+                    //VDP_drawText(debug_string,13,28);
+
+                    connectionAmount=2;
+                    connectionColor=player->board[checkX][checkY];
+                    
+                    u8 incrementer=2;
+
+                    for (u8 advance=checkY-2;(advance>0 && ((checkX+incrementer)<(maxX+1)));advance--)
+                    {
+                        if(player->board[checkX+incrementer][advance]==connectionColor)connectionAmount++;
+                        else if(player->board[checkX+incrementer][advance]!=connectionColor)break;
+
+                        incrementer++;
+                    }
+                    
+                    if(connectionAmount>=3)
+                    {
+                        //sprintf(debug_string,"matched %d diagUp starting at %d,%d",connectionAmount,checkX,checkY);
+                        //VDP_drawText(debug_string,13,28);
+                        
+                        for (u8 i=0;i<connectionAmount;i++)
+                        {
+                            player->boardDestructionQueue[checkX+i][checkY-i]=true;
+
+                            //sprintf(debug_string,"diagUP %d,%d",checkX+i,checkY-i);
+                            //VDP_drawText(debug_string,13,19+i);
+                        }
+
+                        player->flag_destroy=true;
+                    }
+                
+                }
+                if(player->board[checkX][checkY]==player->board[checkX+1][checkY+1])//match diagonally down 2 tiles
+                {
+                    connectionAmount=2;
+                    connectionColor=player->board[checkX][checkY];
+
+                    u8 incrementer=2;
+
+                    for (u8 advance=checkY+2;(advance<maxY+1 && ((checkX+incrementer)<(maxX+1)));advance++)
+                    {
+                        if(player->board[checkX+incrementer][advance]==connectionColor)connectionAmount++;
+                        else if(player->board[checkX+incrementer][advance]!=connectionColor)break;
+
+                        incrementer++;
+                    }
+
+                    if(connectionAmount>=3)
+                    {
+                        //sprintf(debug_string,"matched %d diagDOWN starting at %d,%d",connectionAmount,checkX,checkY);
+                        //VDP_drawText(debug_string,13,28);
+                        
+                        for (u8 i=0;i<connectionAmount;i++)
+                        {
+                            player->boardDestructionQueue[checkX+i][checkY+i]=true;
+                        
+                            //sprintf(debug_string,"diagDOWN %d,%d",checkX+i,checkY+i);
+                            //VDP_drawText(debug_string,13,19+i);
+                        }
+
+                        player->flag_destroy=true;
+                    }
+                }
+                else if(player->board[checkX][checkY]==0)break;//empty tile, leave
+            }
+        }
+    }
+
+    if(player->flag_destroy==true)
+    {
+        if(player==&P1)getTimer(P1destroyTimer,true);//restart p1 timer
+        else if(player==&P2)getTimer(P2destroyTimer,true);//restart p2 timer
+    }
+
+    player->flag_checkmatches=false;
+
+/*
+    if(player->flag_destroy==false && player->board[4][3]!=0)
+    {
+        player->flag_status=toppedOut;
+        sprintf(debug_string,"TOPOUT:CHECKMATCHES");
+        VDP_drawText(debug_string,8,9);
+    }
+*/
 }

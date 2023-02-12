@@ -6,12 +6,14 @@ void printDebug();
 void manageFalling(Player* player);
 void pieceIntoBoard(Player* player);
 
-void checkMatches(Player* player);
 void processDestroy(Player* player);
 void processGravity(Player* player);
 void manageDelays();
 void sendDamage(Player* player, u8 amountDamageTaken);
 void drawMeter();
+
+void doRedraw(Player* player);
+void doCollisionLocking(Player* player);
 
 #define destroyDelay 36000
 #define lockingDelay 24000
@@ -33,17 +35,14 @@ int main()
 
     loadTiles();
 
-    VDP_setPalette(PAL3,fallingSingleAll.palette->data);
+    PAL_setPalette(PAL3,fallingSingleAll.palette->data,DMA);//VDP_setPalette(PAL3,fallingSingleAll.palette->data);
     
     VDP_setTextPalette(PAL3);
 
-    VDP_drawImageEx(BG_B,&gridbg,0x57E,0,0,TRUE,TRUE);//font uses symbols we might never need
+    VDP_drawImageEx(BG_B,&gridbg,0x57E,0,0,TRUE,TRUE);//font uses symbols we might never need, wasteful
 
-    //VDP_setPalette(PAL2,monster.palette->data);
     VDP_drawImageEx(BG_A,&monster,TILE_ATTR_FULL(PAL2, FALSE, FALSE, FALSE, endOfInnerSectionsVRAM),13,10,TRUE,TRUE);
     VDP_drawImageEx(BG_A,&monster2,TILE_ATTR_FULL(PAL1, FALSE, FALSE, FALSE, endOfInnerSectionsVRAM+80),21,10,TRUE,TRUE);
-    //VDP_fillTileMapRectInc(BG_A, TILE_ATTR_FULL(PAL2, FALSE, FALSE, FALSE, endOfInnerSectionsVRAM), 21, 10, 6, 16);
-    //VDP_setTileMapDataRect(BG_A, &monster, 21, 10, 6, 16, 10, DMA);
 
     SYS_enableInts();
 
@@ -63,52 +62,17 @@ int main()
     {
         manageDelays();
 
-        if(P1.flag_destroy==false && P1.flag_checkmatches==false)
-        {
-            if(P1.flag_status==needPiece && P1.damageToBeReceived==0)createPiece(&P1);
+        if(P1.flag_status==needPiece && P1.damageToBeReceived==0 && P1.flag_destroy==false && P1.flag_checkmatches==false)createPiece(&P1);
+        else if(P1.flag_status!=needPiece && P1.flag_destroy==false && P1.flag_checkmatches==false)handleInput(&P1, JOY_readJoypad(JOY_1));
+        
+        if(P2.flag_status==needPiece && P2.damageToBeReceived==0 && P2.flag_destroy==false && P2.flag_checkmatches==false)createPiece(&P2);
+        else if(P2.flag_status!=needPiece && P2.flag_destroy==false && P2.flag_checkmatches==false)handleInput(&P2, JOY_readJoypad(JOY_2));
 
-            if(P1.flag_status!=needPiece)handleInput(&P1, JOY_readJoypad(JOY_1));
+        if(P1.flag_destroy==false && P1.flag_checkmatches==false)doCollisionLocking(&P1);
+        if(P2.flag_destroy==false && P2.flag_checkmatches==false)doCollisionLocking(&P2);
 
-            if(collisionTest(&P1, BOTTOM)==false)manageFalling(&P1);
-            else if (P1.flag_locking==false)
-            {
-                P1.flag_locking=true;
-                getTimer(P1fallLockingTimer,true);
-            }
-            else if(P1.flag_locking==true)
-            {
-                if(getTimer(P1fallLockingTimer,false)>=lockingDelay)
-                    {
-                        pieceIntoBoard(&P1);
-                        P1.flag_locking=false;
-                    }
-            }
-        }
-
-        if(P2.flag_destroy==false && P2.flag_checkmatches==false)
-        {
-            if(P2.flag_status==needPiece)createPiece(&P2);
-
-            handleInput(&P2, JOY_readJoypad(JOY_2));
-
-            if(collisionTest(&P2, BOTTOM)==false)manageFalling(&P2);
-            else if (P2.flag_locking==false)
-            {
-                P2.flag_locking=true;
-                getTimer(P2fallLockingTimer,true);
-            }
-            else if(P2.flag_locking==true)
-            {
-                if(getTimer(P2fallLockingTimer,false)>=lockingDelay)
-                    {
-                        pieceIntoBoard(&P2);
-                        P2.flag_locking=false;
-                    }
-            }
-        }
-
-        if(P1.damageToBeReceived>0 && P1.flag_status==needPiece)sendDamage(&P1, P1.damageToBeReceived);
-        if(P2.damageToBeReceived>0 && P2.flag_status==needPiece)sendDamage(&P2, P2.damageToBeReceived);
+        if(P1.damageToBeReceived>0 && P1.flag_status==needPiece && P1.flag_checkmatches==false && P1.flag_destroy==false)sendDamage(&P1, P1.damageToBeReceived);
+        if(P2.damageToBeReceived>0 && P2.flag_status==needPiece && P2.flag_checkmatches==false && P2.flag_destroy==false)sendDamage(&P2, P2.damageToBeReceived);
 
         if(P1.flag_checkmatches==true)checkMatches(&P1);
         if(P2.flag_checkmatches==true)checkMatches(&P2);
@@ -124,50 +88,46 @@ int main()
 
         SYS_doVBlankProcess();
         
-        if(P1.flag_redraw==true)
-        {
-            //if(P1.drawStartY==0)P1.drawStartY=1;
-            printBoard(&P1, P1.drawStartX,P1.drawStartY,P1.drawEndX,P1.drawEndY);
-            drawPlayerNext(&P1);
+        if(P1.flag_redraw==true && P1.flag_status!=toppedOut)doRedraw(&P1);
+        if(P2.flag_redraw==true && P2.flag_status!=toppedOut)doRedraw(&P2);
 
-            P1.flag_redraw=false;
-            P1.drawStartY=maxY-1;
-        }
+        if(P1.flag_status!=toppedOut)drawFallingSprite(&P1);
+        if(P2.flag_status!=toppedOut)drawFallingSprite(&P2);
 
-        if(P2.flag_redraw==true)
-        {
-            printBoard(&P2, P2.drawStartX,P2.drawStartY,P2.drawEndX,P2.drawEndY);
-            drawPlayerNext(&P2);
-
-            P2.flag_redraw=false;
-        }
-
-        drawFallingSprite(&P1);
-        drawFallingSprite(&P2);
+        if(globalSpawnCloudVisibilityTimer>20)SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
 
         SPR_update();
 
-        drawMeter();
+        //drawMeter();
 
         printDebug();
     }
+
+    //game over stuff goes here
+    SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
+    SPR_setVisibility(P1.fallingPieceSprite[0],HIDDEN);
+    SPR_setVisibility(P1.fallingPieceSprite[1],HIDDEN);
+    SPR_setVisibility(P1.fallingPieceSprite[2],HIDDEN);
+    SPR_setVisibility(P2.fallingPieceSprite[0],HIDDEN);
+    SPR_setVisibility(P2.fallingPieceSprite[1],HIDDEN);
+    SPR_setVisibility(P2.fallingPieceSprite[2],HIDDEN);
+    SPR_update();
     
     return 0;
 }
 
 void printDebug()
 {
-    sprintf(debug_string,"%ld", SYS_getFPS());
-    VDP_drawText(debug_string,19,27);
+    sprintf(debug_string,"%ldFPS", SYS_getFPS());
+    VDP_drawText(debug_string,13,27);
+
+    sprintf(debug_string,"%d", SYS_getCPULoad());
+    strcat(debug_string, "%");
+    strcat(debug_string, "CPU");
+    VDP_drawText(debug_string,21,27);
 
     //sprintf(debug_string,"P1 %d", P1.flag_status);
     //VDP_drawText(debug_string,32,1);
-
-    //sprintf(debug_string,"P1y:%d", P1.yPosition);
-    //VDP_drawText(debug_string,2,4);
-
-    //sprintf(debug_string,"P1x:%d", P1.xPosition);
-    //VDP_drawText(debug_string,1,2);
 
     if(P1.flag_status==toppedOut)
     {
@@ -183,32 +143,31 @@ void printDebug()
     //VDP_clearTextBG(BG_A,16,8,12);//VDP_clearTextBG(VDPPlane plane, u16 x, u16 y, u16 w);
     //sprintf(debug_string,"P1:%lu", getTimer(P1destroyTimer,false));
     //VDP_drawText(debug_string,13,8);
-
-/*
-    //if(P1.flag_destroy==true)
-    //if(1)
-    {
-        for (u8 printBoardX=1;printBoardX<maxX+1;printBoardX++)
-        {
-            for (u8 printBoardY=6;printBoardY<maxY+1;printBoardY++)
-            {
-                sprintf(debug_string,"%d",P1.boardDestructionQueue[printBoardX][printBoardY]);
-                VDP_drawText(debug_string,printBoardX+27,printBoardY-3);
-            }
-        }
-    }
-*/
 }
 
 void manageFalling(Player* player)
 {
-    player->fallingIncrement++;
-    player->spriteY++;
-
-    if(player->fallingIncrement>=TILESIZE)
+    if(player->flag_fastdrop==false)
     {
-        player->yPosition++;
-        player->fallingIncrement=0;
+        player->fallingIncrement++;
+        player->spriteY++;
+
+        if(player->fallingIncrement>=TILESIZE)
+        {
+            player->yPosition++;
+            player->fallingIncrement=0;
+        }
+    }
+    else if(player->flag_fastdrop==true)
+    {
+        s8 i;//has to be outside of the for loop so it can be used afterwards
+        for(i=player->yPosition;i<maxY;i++)
+        {
+            if(player->board[player->xPosition][i+1]!=0)break;
+        }
+        
+        player->yPosition=i;
+        player->spriteY=(i<<3)+(i<<2);//player->spriteY=i*12;//MULU is not good
     }
 }
 
@@ -226,6 +185,8 @@ void pieceIntoBoard(Player* player)
     player->drawStartY=player->yPosition-2;
     player->drawEndX=player->xPosition+1;
     player->drawEndY=player->yPosition+1;
+
+    if(player->flag_fastdrop==true)player->flag_fastdrop=false;
 
     //if(player->board[4][3]==0)player->flag_status=needPiece;
     //else if(player->board[4][3]!=0)player->flag_status=toppedOut;
@@ -246,160 +207,6 @@ void pieceIntoBoard(Player* player)
         sprintf(debug_string,"        ");//this is to clear out the chain text
         VDP_drawText(debug_string,2,2);
     }
-
-    //for(u8 clearTextY=13;clearTextY<29;clearTextY++)VDP_clearTextBG(BG_A,13,clearTextY,18);
-}
-
-void checkMatches(Player* player)
-{
-    //for(u8 clearTextY=22;clearTextY<26;clearTextY++)VDP_clearTextBG(BG_A,13,clearTextY,16);//debug
-
-    u8 connectionAmount,connectionColor;
-
-    for (u8 checkX=1;checkX<maxX+1;checkX++)
-    {
-        for (u8 checkY=maxY+1;checkY>0;checkY--)
-        {
-            if(player->board[checkX][checkY]!=0 && player->board[checkX][checkY]!=globalNumColors)
-            {
-                if(player->board[checkX][checkY]==player->board[checkX+1][checkY])//match laterally 2 tiles
-                {
-                    connectionAmount=2;
-                    connectionColor=player->board[checkX][checkY];
-
-                    for (u8 advance=checkX+2;advance<maxX+1;advance++)
-                    {
-                        if(player->board[advance][checkY]==connectionColor)connectionAmount++;
-                        else if(player->board[advance][checkY]!=connectionColor)break;
-                    }
-
-                    if(connectionAmount>=3)
-                    {
-                        //sprintf(debug_string,"hori %d at %d,%d",connectionAmount,checkX,checkY);
-                        //VDP_drawText(debug_string,13,19);
-                        
-                        for (u8 xAddDestructionQueue=0;xAddDestructionQueue<connectionAmount;xAddDestructionQueue++)
-                        {
-                            player->boardDestructionQueue[checkX+xAddDestructionQueue][checkY]=true;
-                        }
-
-                        player->flag_destroy=true;
-                    }
-                }
-                if(player->board[checkX][checkY]==player->board[checkX][checkY-1])//match vertically 2 tiles
-                {
-                    connectionAmount=2;
-                    connectionColor=player->board[checkX][checkY];
-
-                    //sprintf(debug_string,"init vert match at %d,%d",checkX,checkY);
-                    //VDP_drawText(debug_string,13,28);
-
-                    for (u8 advance=checkY-2;advance>0;advance--)
-                    {
-                        if(player->board[checkX][advance]==connectionColor)connectionAmount++;
-                        else if(player->board[checkX][advance]!=connectionColor)break;
-                    }
-
-                    if(connectionAmount>=3)
-                    {
-                        //sprintf(debug_string,"vert %d at %d,%d",connectionAmount,checkX,checkY);
-                        //VDP_drawText(debug_string,13,19);
-                        
-                        for (u8 yAddDestructionQueue=0;yAddDestructionQueue<connectionAmount;yAddDestructionQueue++)
-                        {
-                            player->boardDestructionQueue[checkX][checkY-yAddDestructionQueue]=true;
-                        }
-
-                        player->flag_destroy=true;
-                    }
-                }
-                if(player->board[checkX][checkY]==player->board[checkX+1][checkY-1])//match diagonally up 2 tiles
-                {
-                    //sprintf(debug_string,"init diagUp match at %d,%d",checkX,checkY);
-                    //VDP_drawText(debug_string,13,28);
-
-                    connectionAmount=2;
-                    connectionColor=player->board[checkX][checkY];
-                    
-                    u8 incrementer=2;
-
-                    for (u8 advance=checkY-2;(advance>0 && ((checkX+incrementer)<(maxX+1)));advance--)
-                    {
-                        if(player->board[checkX+incrementer][advance]==connectionColor)connectionAmount++;
-                        else if(player->board[checkX+incrementer][advance]!=connectionColor)break;
-
-                        incrementer++;
-                    }
-                    
-                    if(connectionAmount>=3)
-                    {
-                        //sprintf(debug_string,"matched %d diagUp starting at %d,%d",connectionAmount,checkX,checkY);
-                        //VDP_drawText(debug_string,13,28);
-                        
-                        for (u8 i=0;i<connectionAmount;i++)
-                        {
-                            player->boardDestructionQueue[checkX+i][checkY-i]=true;
-
-                            //sprintf(debug_string,"diagUP %d,%d",checkX+i,checkY-i);
-                            //VDP_drawText(debug_string,13,19+i);
-                        }
-
-                        player->flag_destroy=true;
-                    }
-                
-                }
-                if(player->board[checkX][checkY]==player->board[checkX+1][checkY+1])//match diagonally down 2 tiles
-                {
-                    connectionAmount=2;
-                    connectionColor=player->board[checkX][checkY];
-
-                    u8 incrementer=2;
-
-                    for (u8 advance=checkY+2;(advance<maxY+1 && ((checkX+incrementer)<(maxX+1)));advance++)
-                    {
-                        if(player->board[checkX+incrementer][advance]==connectionColor)connectionAmount++;
-                        else if(player->board[checkX+incrementer][advance]!=connectionColor)break;
-
-                        incrementer++;
-                    }
-
-                    if(connectionAmount>=3)
-                    {
-                        //sprintf(debug_string,"matched %d diagDOWN starting at %d,%d",connectionAmount,checkX,checkY);
-                        //VDP_drawText(debug_string,13,28);
-                        
-                        for (u8 i=0;i<connectionAmount;i++)
-                        {
-                            player->boardDestructionQueue[checkX+i][checkY+i]=true;
-                        
-                            //sprintf(debug_string,"diagDOWN %d,%d",checkX+i,checkY+i);
-                            //VDP_drawText(debug_string,13,19+i);
-                        }
-
-                        player->flag_destroy=true;
-                    }
-                }
-                else if(player->board[checkX][checkY]==0)break;//empty tile, leave
-            }
-        }
-    }
-
-    if(player->flag_destroy==true)
-    {
-        if(player==&P1)getTimer(P1destroyTimer,true);//restart p1 timer
-        else if(player==&P2)getTimer(P2destroyTimer,true);//restart p2 timer
-    }
-
-    player->flag_checkmatches=false;
-
-/*
-    if(player->flag_destroy==false && player->board[4][3]!=0)
-    {
-        player->flag_status=toppedOut;
-        sprintf(debug_string,"TOPOUT:CHECKMATCHES");
-        VDP_drawText(debug_string,8,9);
-    }
-*/
 }
 
 void processDestroy(Player* player)
@@ -529,12 +336,15 @@ void manageDelays()
 
     if(P1.rotateDelay>0)P1.rotateDelay--;
     if(P2.rotateDelay>0)P2.rotateDelay--;
+
+    if(globalSpawnCloudVisibilityTimer<40)globalSpawnCloudVisibilityTimer++;
 }
 
 void handleInput(Player* player, u16 buttons)
 {
     if(player->flag_status!=toppedOut)
     {
+
         if(buttons & BUTTON_LEFT && player->moveDelay==0 && collisionTest(player, LEFT)==FALSE)
         {
             player->xPosition--;
@@ -551,16 +361,6 @@ void handleInput(Player* player, u16 buttons)
         //if (buttons & BUTTON_DOWN && player->fallDelay==0 && collisionTest(player, BOTTOM)==FALSE)
         if (buttons & BUTTON_DOWN && collisionTest(player, BOTTOM)==FALSE)
         {
-            //player->fallingIncrement++;
-            //player->spriteY+=2;
-
-            //player->yPosition++;
-            //player->spriteY+=TILESIZE;
-
-            //manageFalling(player);
-
-            //player->fallDelay=FALL_DELAY_AMOUNT;
-
             #define holdDownFallAmount 2
 
             if(player->fallingIncrement<TILESIZE-holdDownFallAmount)
@@ -574,6 +374,11 @@ void handleInput(Player* player, u16 buttons)
                 player->yPosition++;
                 player->fallingIncrement=0;
             }
+        }
+
+        if (buttons & BUTTON_UP)// && player->yPosition>2)
+        {
+            player->flag_fastdrop=true;
         }
 
         if (buttons & BUTTON_B && player->rotateDelay==0 && player->has_let_go_B==true)
@@ -593,23 +398,14 @@ void handleInput(Player* player, u16 buttons)
         if(!(buttons & BUTTON_B))player->has_let_go_B=true;
     }
 
+    /*
     if(buttons & BUTTON_C)//debug
     {
         //processGravity(&P1);
 
         P1.damageToBeReceived=8;
     }
-    if(buttons & BUTTON_START)//debug
-    {
-        for (u8 printBoardX=1;printBoardX<maxX+1;printBoardX++)
-        {
-            for (u8 printBoardY=9;printBoardY<maxY+1;printBoardY++)
-            {
-                sprintf(debug_string,"%d",P1.board[printBoardX][printBoardY]);
-                VDP_drawText(debug_string,printBoardX,printBoardY-6);
-            }
-        }
-    }
+    */
 }
 
 void sendDamage(Player* player, u8 amountDamageTaken)
@@ -641,4 +437,43 @@ void drawMeter()
 
     sprintf(debug_string,"%d", P2.meter);
     VDP_drawText(debug_string,38,meterYpos);
+}
+
+void doRedraw(Player* player)
+{
+    printBoard(player, player->drawStartX,player->drawStartY,player->drawEndX,player->drawEndY);
+    drawPlayerNext(player);
+
+    player->flag_redraw=false;
+    player->drawStartY=maxY-1;
+}
+
+void doCollisionLocking(Player* player)
+{
+    if(collisionTest(player, BOTTOM)==false)manageFalling(player);
+    else if (player->flag_locking==false)
+    {
+        player->flag_locking=true;
+        if(player==&P1)getTimer(P1fallLockingTimer,true);      //P1fallLockingTimer put it in struct
+        else if(player==&P2)getTimer(P2fallLockingTimer,true);
+    }
+    else if(player->flag_locking==true)
+    {
+        if(player==&P1)
+        {
+            if(getTimer(P1fallLockingTimer,false)>=lockingDelay)  //P1fallLockingTimer put it in struct
+                {
+                    pieceIntoBoard(player);
+                    player->flag_locking=false;
+                }
+        }
+        else if(player==&P2)
+        {
+            if(getTimer(P2fallLockingTimer,false)>=lockingDelay) 
+                {
+                    pieceIntoBoard(player);
+                    player->flag_locking=false;
+                }
+        }
+    }
 }
