@@ -25,8 +25,9 @@ typedef struct {
     u8 moveDelay;
 
     u8 rotateDelay;
-    u8 has_let_go_A;
-    u8 has_let_go_B;
+    //u8 has_let_go_B;
+    //u8 has_let_go_C;
+    bool has_released_cycle;
 
     u8 drawStartX,drawStartY,drawEndX,drawEndY;
 
@@ -61,6 +62,8 @@ void setSharedNext();
 void drawSharedNext();
 void drawPlayerNext(Player* player);
 void createPiece(Player* player);
+
+void effectFastDrop(Player* player);
 
 u8 sharedNext[fallingPieceNumberOfTiles];
 u8 sharedNextStatus;
@@ -282,16 +285,11 @@ void initialize()
     //P1.flag_status=spawningPiece;
     //P2.flag_status=spawningPiece;
 
-    P1.fallingIncrement=0;
-    P2.fallingIncrement=0;
+    //P1.fallingIncrement=0;
+    //P2.fallingIncrement=0;
 
-    P1.has_let_go_A=true;
-    P1.has_let_go_B=true;
-    P2.has_let_go_A=true;
-    P2.has_let_go_B=true;
-
-    //startTimer(P1fallLockingTimer);//what is this for?
-    //startTimer(P2fallLockingTimer);
+    P1.has_released_cycle=true;
+    P2.has_released_cycle=true;
 }
 
 void drawTile(Player* player, u8 xPos, u8 yPos)//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
@@ -1091,6 +1089,7 @@ void createPiece(Player* player)
     player->yPosition=ySpawn;
     player->moveDelay=0;
 
+    player->flag_locking=false;
     player->flag_status=fallingPiece;
     KLog("$$fallingPiece");
 
@@ -1120,21 +1119,13 @@ void checkMatches(Player* player)
                         else if(player->board[advance][checkY]!=connectionColor)break;
                     }
 
-                    if(connectionAmount>=3)
-                    {
-                        //sprintf(debug_string,"hori %d at %d,%d",connectionAmount,checkX,checkY);
-                        //VDP_drawText(debug_string,13,19);
-                        //KLog("***match - hori");
+                    if(connectionAmount>=3){//KLog("***match - hori");
                         
                         for (u8 xAddDestructionQueue=0;xAddDestructionQueue<connectionAmount;xAddDestructionQueue++)
                         {
                             player->boardDestructionQueue[checkX+xAddDestructionQueue][checkY]=true;
                         }
-
-                        //player->flag_destroy=true;
-                        //player->flag_blinkmatches=true;
-                        player->flag_status=blinkingMatches;
-                        //KLog("blinkingMatches");
+                        player->flag_status=blinkingMatches;//KLog("blinkingMatches");
                     }
                 }
 
@@ -1153,21 +1144,12 @@ void checkMatches(Player* player)
                         else if(player->board[checkX][advance]!=connectionColor)break;
                     }
 
-                    if(connectionAmount>=3)
-                    {
-                        //sprintf(debug_string,"vert %d at %d,%d",connectionAmount,checkX,checkY);
-                        //VDP_drawText(debug_string,13,19);
-                        //KLog("***match - vert");
-                        
+                    if(connectionAmount>=3){//KLog("***match - vert");
                         for (u8 yAddDestructionQueue=0;yAddDestructionQueue<connectionAmount;yAddDestructionQueue++)
                         {
                             player->boardDestructionQueue[checkX][checkY-yAddDestructionQueue]=true;
                         }
-
-                        //player->flag_destroy=true;
-                        //player->flag_blinkmatches=true;
-                        player->flag_status=blinkingMatches;
-                        //KLog("blinkingMatches");
+                        player->flag_status=blinkingMatches;//KLog("blinkingMatches");
                     }
                 }
 
@@ -1190,13 +1172,7 @@ void checkMatches(Player* player)
                         incrementer++;
                     }
                     
-                    if(connectionAmount>=3)
-                    {
-                        //sprintf(debug_string,"matched %d diagUp starting at %d,%d",connectionAmount,checkX,checkY);
-                        //VDP_drawText(debug_string,13,28);
-
-                        //KLog("***match - diagUp");
-                        
+                    if(connectionAmount>=3){//KLog("***match - diagUp");
                         for (u8 i=0;i<connectionAmount;i++)
                         {
                             player->boardDestructionQueue[checkX+i][checkY-i]=true;
@@ -1204,11 +1180,7 @@ void checkMatches(Player* player)
                             //sprintf(debug_string,"diagUP %d,%d",checkX+i,checkY-i);
                             //VDP_drawText(debug_string,13,19+i);
                         }
-
-                        //player->flag_destroy=true;
-                        //player->flag_blinkmatches=true;
-                        player->flag_status=blinkingMatches;
-                        //KLog("blinkingMatches");
+                        player->flag_status=blinkingMatches;//KLog("blinkingMatches");
                     }
                 
                 }
@@ -1229,12 +1201,7 @@ void checkMatches(Player* player)
                         incrementer++;
                     }
 
-                    if(connectionAmount>=3)
-                    {
-                        //sprintf(debug_string,"matched %d diagDOWN starting at %d,%d",connectionAmount,checkX,checkY);
-                        //VDP_drawText(debug_string,13,28);
-                        //KLog("***match - diagDown");
-                        
+                    if(connectionAmount>=3){//KLog("***match - diagDown");
                         for (u8 i=0;i<connectionAmount;i++)
                         {
                             player->boardDestructionQueue[checkX+i][checkY+i]=true;
@@ -1242,24 +1209,14 @@ void checkMatches(Player* player)
                             //sprintf(debug_string,"diagDOWN %d,%d",checkX+i,checkY+i);
                             //VDP_drawText(debug_string,13,19+i);
                         }
-
-                        //player->flag_destroy=true;
-                        //player->flag_blinkmatches=true;
-                        player->flag_status=blinkingMatches;
-                        //KLog("blinkingMatches");
+                        player->flag_status=blinkingMatches;//KLog("blinkingMatches");
                     }
                 }
             }
         }
     }
-
-    if(player->flag_status!=blinkingMatches)//there were no connections
-    {
-        player->flag_status=spawningPiece;
-        //KLog("no match - spawningPiece");
-    }
+    if(player->flag_status!=blinkingMatches)player->flag_status=spawningPiece;//there were no connections
 }
-
 
 /*
 void sendDamage(Player* player, u8 amountDamageTaken)
@@ -1282,3 +1239,16 @@ void sendDamage(Player* player, u8 amountDamageTaken)
     processGravity(player);
 }
 */
+
+void effectFastDrop(Player* player)
+{
+    s8 i;//has to be outside of the for loop so it can be used afterwards
+
+    for(i=player->yPosition;i<maxY;i++)
+        if(player->board[player->xPosition][i+1]!=0)break;
+    
+    player->yPosition=i;
+    player->spriteY=(i<<3)+(i<<2)+1;//player->spriteY=i*12;//MULU is not good
+
+    player->fallingIncrement=0;
+}

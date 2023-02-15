@@ -12,15 +12,14 @@ void processDestroy(Player* player);
 void processGravity(Player* player);
 void manageDelays();
 void sendDamage(Player* player, u8 amountDamageTaken);
-void effectFastDrop(Player* player);
 
 void doRedraw(Player* player);
 
 void gameOver();
 
-#define lockingDelayMaxTime 32000//24000 //higher is more time to let the player lock
+#define lockingDelayMaxTime 24000//24000 //higher is more time to let the player lock
 
-#define maxLaterals maxX //how many times a player can fiddle with their sonic dropped piece
+#define maxLaterals maxX-1 //how many times a player can fiddle with their sonic dropped piece
 
 //PAL0
 //PAL1
@@ -127,7 +126,6 @@ void pieceIntoBoard(Player* player)
     player->chainAmount=0;//reset chain counter
 
     player->flag_status=checkingMatches;
-    player->flag_locking=false;
 
     player->drawStartX=player->xPosition;
     player->drawStartY=player->yPosition-2;
@@ -297,37 +295,32 @@ void handleInput(Player* player, u16 buttons)
                 player->fallingIncrement+=holdDownFallAmount;
                 player->spriteY+=holdDownFallAmount;
             }
-/*
-            if(player->fallingIncrement>=TILESIZE)
-            {
-                player->yPosition++;
-                player->fallingIncrement=0;
-            }
-*/
         }
 
-        if (buttons & BUTTON_UP)
+        if (buttons & BUTTON_UP && player->moveDelay==0)
         {
             effectFastDrop(player);
         }
     }
-    if (buttons & BUTTON_B && player->rotateDelay==0 && player->has_let_go_B==true)
-    {
-        doRotate(player, DOWN);
-        player->rotateDelay=ROTATE_DELAY_AMOUNT;
-        player->has_let_go_B=false;
-    }
-    else if (buttons & BUTTON_A && player->rotateDelay==0 && player->has_let_go_A==true)
-    {
-        doRotate(player, UP);
-        player->rotateDelay=ROTATE_DELAY_AMOUNT;
-        player->has_let_go_A=false;
-    }
 
-    if(!(buttons & BUTTON_A))player->has_let_go_A=true;
-    if(!(buttons & BUTTON_B))player->has_let_go_B=true;
+    if(!(buttons & BUTTON_C) && !(buttons & BUTTON_B))player->has_released_cycle=true;
 
-    if(buttons & BUTTON_C)player->lockingLateralCounter=maxLaterals;
+    if(player->rotateDelay==0 && player->has_released_cycle==true)
+    {
+        if (buttons & BUTTON_C)
+        {
+            doRotate(player, DOWN);
+            player->rotateDelay=ROTATE_DELAY_AMOUNT;
+            player->has_released_cycle=false;
+
+        }
+        else if (buttons & BUTTON_B)
+        {
+            doRotate(player, UP);
+            player->rotateDelay=ROTATE_DELAY_AMOUNT;
+            player->has_released_cycle=false;
+        }
+    }
 }
 
 void doRedraw(Player* player)
@@ -338,7 +331,7 @@ void doRedraw(Player* player)
     drawPlayerNext(player);
 
     player->flag_redraw=false;
-    player->drawStartY=maxY-1;
+    //player->drawStartY=maxY-1;
 }
 
 void blinkMatches(Player* player)
@@ -399,7 +392,6 @@ void manageFalling(Player* player)
     if(collisionTest(player, BOTTOM)==false)
     {
         player->fallingIncrement++;
-        player->spriteY++;
 
         if(player->fallingIncrement>=TILESIZE)
         {
@@ -407,31 +399,22 @@ void manageFalling(Player* player)
             player->fallingIncrement=0;
         }
 
+        player->spriteY++;
+
         player->flag_locking=false;//reset
     }
     else if(player->flag_locking==false)
     {
-        //if(player->fallingIncrement<TILESIZE-2)player->spriteY+=(TILESIZE-player->fallingIncrement-4);
-
         getTimer(P1fallLockingTimer,true);//start the timer
         player->lockingLateralCounter=0;
         player->flag_locking=true;
+
         return;
     }
     else if(player->flag_locking==true)
     {
+        if(player->fallingIncrement>TILESIZE)player->spriteY+=(TILESIZE-player->fallingIncrement);
         if((player->lockingLateralCounter>=maxLaterals || (getTimer(P1fallLockingTimer,false)>=lockingDelayMaxTime)))pieceIntoBoard(player);
     }
 
-}
-
-void effectFastDrop(Player* player)
-{
-    s8 i;//has to be outside of the for loop so it can be used afterwards
-
-    for(i=player->yPosition;i<maxY;i++)
-        if(player->board[player->xPosition][i+1]!=0)break;
-    
-    player->yPosition=i;
-    player->spriteY=(i<<3)+(i<<2);//player->spriteY=i*12;//MULU is not good
 }
