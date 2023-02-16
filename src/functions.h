@@ -24,19 +24,18 @@ typedef struct {
 
     u8 moveDelay;
 
-    u8 rotateDelay;
-    //u8 has_let_go_B;
-    //u8 has_let_go_C;
+    u8 cycleDelay;
     bool has_released_cycle;
 
     u8 drawStartX,drawStartY,drawEndX,drawEndY;
-
-    u8 chainAmount;
 
     u8 damageToBeReceived;
 
     bool flag_locking;
     u8 lockingLateralCounter;
+
+    u8 chainAmount;
+    u8 howManyDestroyed;
 } Player;
 
 Player P1;
@@ -46,17 +45,21 @@ u8 randomRange(u8 rangeStart, u8 rangeEnd);
 void initialize();
 void loadTiles();
 void loadDebugFieldData();
+void printDebug();
 
-void clearBoard(Player* player);
+void clearBoardData(Player* player);
 void drawFallingSprite(Player* player);
-void printBoardAll();
-void drawTile(Player* player, u8 xPos, u8 yPos);
+void drawFullTile(Player* player, u8 xPos, u8 yPos);
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY);
 
-void doRotate(Player* player, u8 direction);
+void gameLogicSwitch(Player* player);
+
+void doCycle(Player* player, u8 direction);
 void handleInput(Player* player, u16 buttons);
+void manageDelays();
 bool collisionTest(Player* player, u8 direction);
 void checkMatches(Player* player);
+void processGravity(Player* player);
 
 void setSharedNext();
 void drawSharedNext();
@@ -64,6 +67,13 @@ void drawPlayerNext(Player* player);
 void createPiece(Player* player);
 
 void effectFastDrop(Player* player);
+void manageFalling(Player* player);
+void pieceIntoBoard(Player* player);
+
+void sendDamage(Player* player, u8 amountDamageTaken);
+
+void processDestroy(Player* player);
+void blinkMatches(Player* player);
 
 u8 sharedNext[fallingPieceNumberOfTiles];
 u8 sharedNextStatus;
@@ -124,7 +134,7 @@ enum colors{
 #define UP 1
 
 #define MOVE_DELAY_AMOUNT 6
-#define ROTATE_DELAY_AMOUNT 8
+#define CYCLE_DELAY_AMOUNT 8
 
 #define ADDAMOUNT 4
 #define ADDAMOUNT2 8
@@ -139,6 +149,9 @@ enum timers{
     P1_blink_timer,
     P2_blink_timer
 };
+
+#define lockingDelayMaxTime 24000//24000 //higher is more time to let the player lock
+#define maxLaterals maxX-1 //how many times a player can fiddle with their sonic dropped piece
 
 void loadTiles()
 {
@@ -217,7 +230,7 @@ void loadTiles()
 #define innerSectionsVRAM extra_tiles_start+30// 64 tiles worth of VRAM (32 per player)
 #define endOfInnerSectionsVRAM innerSectionsVRAM+64
 
-void clearBoard(Player* player)//only called at initialization
+void clearBoardData(Player* player)//only called at initialization
 {
     for (u8 boardX=1;boardX<maxX+1;boardX++)
     {
@@ -258,17 +271,35 @@ void loadDebugFieldData()
 
 Sprite* sharedNextSpawnCloud;
 
+Sprite* patrako_idle;
+Sprite* patrako_lost;
+Sprite* patrako_cheer;
+bool patrako_is_cheering;
+
+Sprite* sakuraSpr;
+
 void initialize()
 {
     //P1.numColors=globalNumColors;//this would be used for having diff # of total colors for the players, but with only 5 max it doesn't make sense
     //P2.numColors=P1.numColors;
 
-    sharedNextSpawnCloud = SPR_addSpriteSafe(&cloud, -64, -64, TILE_ATTR(PAL0, TRUE, FALSE, FALSE));//TILE_ATTR(pal, prio, flipV, flipH)
+    sharedNextSpawnCloud = SPR_addSpriteSafe(&cloud, -64, -64, TILE_ATTR(PAL1, FALSE, FALSE, FALSE));//TILE_ATTR(pal, prio, flipV, flipH)
     SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
-    SPR_setPosition(sharedNextSpawnCloud,148,28);
+    SPR_setPosition(sharedNextSpawnCloud,148,27);
 
-    clearBoard(&P1);
-    clearBoard(&P2);
+    PAL_setPalette(PAL2,patrakoIdle.palette->data,DMA);
+    patrako_idle = SPR_addSpriteSafe(&patrakoIdle, 110, 144, TILE_ATTR(PAL2, FALSE, FALSE, FALSE));
+
+    patrako_cheer = SPR_addSpriteSafe(&patrakoCheer, 98, 130, TILE_ATTR(PAL2, FALSE, FALSE, FALSE));
+    SPR_setVisibility(patrako_cheer,HIDDEN);
+
+    patrako_is_cheering=false;
+
+    PAL_setPalette(PAL1,sakura.palette->data,DMA);
+    sakuraSpr = SPR_addSpriteSafe(&sakura, 158, 136,TILE_ATTR(PAL1, FALSE, FALSE, FALSE));
+
+    clearBoardData(&P1);
+    clearBoardData(&P2);
 
     for (u8 createIndex=0;createIndex<3;createIndex++)
     {
@@ -290,666 +321,23 @@ void initialize()
 
     P1.has_released_cycle=true;
     P2.has_released_cycle=true;
-}
 
-void drawTile(Player* player, u8 xPos, u8 yPos)//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
-{
-    u8 colorAdd=0;//4 tiles for each color. so color 2 is adding 4, color 3 is adding 8
-    bool flag_erase=false;
-
-    //if we are drawing a tile other than color 1, we need to increase the tile index    
-    if(player->board[xPos][yPos]>1)colorAdd=(player->board[xPos][yPos]-1)<<2;//multiply by 4
-    else if(player->board[xPos][yPos]==0)flag_erase=true;
-
-    u8 p2offsetX=0;
-    if(player==&P2)p2offsetX=player2offset;
-
-    u8 drawingxPos=xPos+(xPos>>1)+p2offsetX;
-    u8 drawingyPos=yPos+(yPos>>1);
-
-    if(flag_erase==false)
-    {
-        if(xPos%2!=0 && yPos%2!=0)//odd column, odd row (1,1)
-        {
-            //top left: bottom half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-            //top right: bottom left corner
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 4+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);
-            //bottom left: full square
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
-            //bottom right: left half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);
-        }
-        else if(xPos%2==0 && yPos%2!=0)//even column, odd row (2,1)
-        {
-            //top left: bottom right corner
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 4+colorAdd), drawingxPos+xOffset-1, drawingyPos+yOffset-1, 1, 1);
-            //top right: bottom half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-            //bottom left: right half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+colorAdd), drawingxPos+xOffset-1, drawingyPos+yOffset, 1, 1);
-            //bottom right: full square
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
-        }
-        else if(xPos%2!=0 && yPos%2==0)//odd column, even row (1,2)
-        {
-            //top left: full square
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-            //top right: left half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);
-            //bottom left: top half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
-            //bottom right: top left corner
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, TRUE, 4+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);//was FALSE,TRUE,5
-        }
-        else if(xPos%2==0 && yPos%2==0)//even column, even row (2,2)
-        {
-            //top left: right half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+colorAdd), drawingxPos+xOffset-1, drawingyPos+yOffset-1, 1, 1);
-            //top right: full square
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-            //bottom left: top right corner
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 4+colorAdd), drawingxPos+xOffset-1, drawingyPos+yOffset, 1, 1);//was FALSE,FALSE,5
-            //bottom right: top half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
-        }
-    }
-    else if(flag_erase==true)
-    {
-        if(xPos%2!=0 && yPos%2!=0)//odd column, odd row (1,1)
-        {
-            //top left: bottom half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-            //top right: bottom left corner
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 0), drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);
-            //bottom left: full square
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
-            //bottom right: left half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 0), drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);
-        }
-        else if(xPos%2==0 && yPos%2!=0)//even column, odd row (2,1)
-        {
-            //top left: bottom right corner
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset-1, drawingyPos+yOffset-1, 1, 1);
-            //top right: bottom half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-            //bottom left: right half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset-1, drawingyPos+yOffset, 1, 1);
-            //bottom right: full square
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
-        }
-        else if(xPos%2!=0 && yPos%2==0)//odd column, even row (1,2)
-        {
-            //top left: full square
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-            //top right: left half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 0), drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);
-            //bottom left: top half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
-            //bottom right: top left corner
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, TRUE, 0), drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);//was FALSE,TRUE,5
-        }
-        else if(xPos%2==0 && yPos%2==0)//even column, even row (2,2)
-        {
-            //top left: right half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset-1, drawingyPos+yOffset-1, 1, 1);
-            //top right: full square
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-            //bottom left: top right corner
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 0), drawingxPos+xOffset-1, drawingyPos+yOffset, 1, 1);//was FALSE,FALSE,5
-            //bottom right: top half
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 0), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
-        }
-    }
+    P1.blinkTimes=0;
+    P2.blinkTimes=0;
 }
 
 void drawFallingSprite(Player* player)
 {
-    //if(player->flag_status==lockingPiece)player->spriteY+=2;
-
     SPR_setPosition(player->fallingPieceSprite[2],player->spriteX,player->spriteY);
     SPR_setPosition(player->fallingPieceSprite[1],player->spriteX,player->spriteY-TILESIZE);
     SPR_setPosition(player->fallingPieceSprite[0],player->spriteX,player->spriteY-TILESIZE-TILESIZE);
-
-    SPR_setVisibility(player->fallingPieceSprite[2],VISIBLE);//bottom piece
-    SPR_setVisibility(player->fallingPieceSprite[1],VISIBLE);//middle piece
-    SPR_setVisibility(player->fallingPieceSprite[0],VISIBLE);//top piece
-}
-
-void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, from top to bottom
-{  
-    if(startY<2)startY=2;//no need to draw tiles above the barrier area
-
-    for(u8 xDraw=startX;xDraw<endX;xDraw++)
-    {
-        for(u8 yDraw=startY;yDraw<endY;yDraw++)
-        {
-           drawTile(player, xDraw,yDraw);
-           //if(player->board[xDraw][yDraw]!=0)drawTile(player, xDraw,yDraw);
-        }
-    }
-
-    u8 p2offsetX=0;
-    if(player==&P2)p2offsetX=player2offset;
-
-    s8 drawPosX,drawPosY;
-    u8 i;
-
-//updown
-    for (u8 updownX=startX;updownX<endX;updownX++)//u8 updownX=1 starts on updownX at 1, what happens if it's 2?
-    {
-        //for (u8 updownY=startY+yOddAdder;updownY<endY+1;updownY+=2)
-        for (u8 updownY=2;updownY<maxY;updownY+=2)//u8 updownY=2 starts on updownY at 2, what happens if it's 1?
-        {
-            if(player->board[updownX][updownY]!=0 || player->board[updownX][updownY+1]!=0)
-            {
-                i=0;
-
-                player->updown[updownX][i]=(player->board[updownX][updownY]<<4)+player->board[updownX][updownY+1];
-
-                //sprintf(debug_string,"UD:%d", P1.updown[updownX][i]);
-                //VDP_drawText(debug_string,34,1+yDrawAdd);
-
-                drawPosX=xOffset+updownX+((updownX)>>1)+p2offsetX;
-                drawPosY=yOffset+updownY+((updownY)>>1);
-
-                switch(player->updown[updownX][i])//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
-                {
-                    case 1://0,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2), drawPosX,drawPosY, 1, 1);
-                    break;
-
-                    case 2://0,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+ADDAMOUNT), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 3://0,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+ADDAMOUNT2), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 4://0,4
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+ADDAMOUNT3), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 5://0,5
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+ADDAMOUNT4), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 6://0,6
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, 2+ADDAMOUNT5), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 16://1,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 17://1,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 18://1,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+15), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 19://1,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+16), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 20://1,4
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+17), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 21://1,5
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+18), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 22://1,6
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+19), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 32://2,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+ADDAMOUNT), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 33://2,1 - flipped 1,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+15), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 34://2,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 35://2,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+20), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 36://2,4
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+21), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 37://2,5
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+22), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 38://2,6
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+23), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 48://3,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+ADDAMOUNT2), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 49://3,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+16), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 50://3,2 - a flipped 23
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+20), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 51://3,3 solid green
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT2), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 52://3,4
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+24), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 53://3,5
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+25), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 54://3,6
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+26), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 64://4,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+ADDAMOUNT3), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 65://4,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+17), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 66://4,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+21), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 67://4,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+24), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 68://4,4 solid
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT3), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 69://4,5
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+27), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 70://4,6
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+28), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 80://5,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+ADDAMOUNT4), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 81://5,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+18), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 82://5,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+22), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 83://5,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+25), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 84://5,4
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+27), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 85://5,5 solid
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT4), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 86://5,6
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+29), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 96://6,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 2+ADDAMOUNT5), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 97://6,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+19), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 98://6,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+23), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 99://6,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+26), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 100://6,4
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+28), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 101://6,5
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, TRUE, FALSE, extra_tiles_start+29), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 102://6,6 solid
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT5), drawPosX, drawPosY, 1, 1);
-                    break;
-                }
-                
-            i++;
-            
-            }
-        }
-    }
-
-    //u8 xOddAdder=0;
-    //if((startX&1)==0)xOddAdder=1;
-
-    //u8 endXadder=0;
-    //if(endX<=maxX)endXadder=1;
-
-//leftright 
-    for (u8 leftrightY=startY;leftrightY<endY;leftrightY++)
-    {
-        for (u8 leftrightX=1;leftrightX<maxX;leftrightX+=2)//leftrightX<endX+endXadder u8 leftrightX=startX-xOddAdder;
-        {
-            if(player->board[leftrightX][leftrightY]!=0 || player->board[leftrightX+1][leftrightY]!=0)
-            {
-                i=0;
-
-                player->leftright[i][leftrightY]=(player->board[leftrightX][leftrightY]<<4)+player->board[leftrightX+1][leftrightY];
-                //now we have the color of the left cell in the left half of this byte and the right color in the right half of this byte
-
-                //sprintf(debug_string,"LR:%d", P1.leftright[i][leftrightY]);
-                //VDP_drawText(debug_string,34,1+xDrawAdd);
-
-                drawPosX=xOffset+leftrightX+((leftrightX)>>1)+1+p2offsetX;
-                drawPosY=yOffset+leftrightY+((leftrightY-1)>>1);
-
-                switch(player->leftright[i][leftrightY])//TILE_ATTR_FULL(pal, prio, flipV, flipH, index)
-                {
-                    case 1://0,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3), drawPosX,drawPosY, 1, 1);
-                    break;
-
-                    case 2://0,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+ADDAMOUNT), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 3://0,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+ADDAMOUNT2), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 4://0,4
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+ADDAMOUNT3), drawPosX,drawPosY, 1, 1);
-                    break;
-
-                    case 5://0,5
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+ADDAMOUNT4), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 6://0,6
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 3+ADDAMOUNT5), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 16://1,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 17://1,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 18://1,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+0), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 19://1,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+1), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 20://1,4
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+2), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 21://1,5
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+3), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 22://1,6
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+4), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 32://2,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+ADDAMOUNT), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 33://2,1 - flipped 1,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+0), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 34://2,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 1+ADDAMOUNT), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 35://2,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+5), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 36://2,4
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+6), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 37://2,5
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+7), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 38://2,6
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+8), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 48://3,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+ADDAMOUNT2), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 49://3,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+1), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 50://3,2 - a flipped 23
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+5), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 51://3,3 solid green
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT2), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 52://3,4
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+9), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 53://3,5
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+10), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 54://3,6
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+11), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 64://4,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+ADDAMOUNT3), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 65://4,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+2), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 66://4,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+6), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 67://4,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+9), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 68://4,4 solid
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT3), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 69://4,5
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+12), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 70://4,6
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+13), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 80://5,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+ADDAMOUNT4), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 81://5,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+3), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 82://5,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+7), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 83://5,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+10), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 84://5,4
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+12), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 85://5,5 solid
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT4), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 86://5,6
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, extra_tiles_start+14), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 96://6,0
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, 3+ADDAMOUNT5), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 97://6,1
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+4), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 98://6,2
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+8), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 99://6,3
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+11), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 100://6,4
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+13), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 101://6,5
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, TRUE, extra_tiles_start+14), drawPosX, drawPosY, 1, 1);
-                    break;
-
-                    case 102://6,6 solid
-                    VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+ADDAMOUNT5), drawPosX, drawPosY, 1, 1);
-                    break;
-                }
-            
-            i++;
-            
-            }
-        }
-    }
-
-//dynamic inner section vram load + draw
-    #define allblank 0x0000
-    #define allcolor1 0x4444
-    #define allcolor2 0x5555
-    #define allcolor3 0x6666
-    #define allcolor4 0x7777
-    #define allcolor5 0x8888
-    #define allgarbage 0x9999
-
-    u32 tile[8];
-
-    u16 leftside,rightside;
-    u8 tileIncrementer=0;
-    u8 UpperHalfFlag;
-
-    u8 vramOffsetP2=0;
-    if(player==&P2)vramOffsetP2=32;
-
-    //if(startX>2)tileIncrementer+=(startX-1);
-
-    //if(startY>3)tileIncrementer-=(startY-1);
-    //if(startY>12)tileIncrementer+=1;
-
-    for(u8 innerConnectorRow=1;innerConnectorRow<maxX+1;innerConnectorRow+=2)//for(u8 innerConnectorRow=startX-xOddAdder;innerConnectorRow<endX+endXadder;innerConnectorRow+=2)
-    {
-        for(u8 innerConnectorColumn=3;innerConnectorColumn<maxY+1;innerConnectorColumn+=2)
-        {
-            if(player->board[innerConnectorRow][innerConnectorColumn]!=0 || player->board[innerConnectorRow+1][innerConnectorColumn]!=0)
-            {
-                for (u8 section=0;section<=4;section+=4)
-                {
-                    for (u8 yDraw=0;yDraw<4;yDraw++)
-                    {
-                        if(section<=2)UpperHalfFlag=1;//upper half
-                        else UpperHalfFlag=0;//lower half
-
-                        if(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==1)leftside=allcolor1;
-                        else if(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==2)leftside=allcolor2;
-                        else if(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==3)leftside=allcolor3;
-                        else if(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==4)leftside=allcolor4;
-                        else if(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==5)leftside=allcolor5;
-                        else if(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag]==6)leftside=allgarbage;
-                        else leftside=allblank;
-
-                        if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==1)rightside=allcolor1;
-                        else if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==2)rightside=allcolor2;
-                        else if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==3)rightside=allcolor3;
-                        else if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==4)rightside=allcolor4;
-                        else if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==5)rightside=allcolor5;
-                        else if(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]==6)rightside=allgarbage;
-                        //else if(innerConnectorRow+1>=maxX)rightside=allblank;
-                        else rightside=allblank;
-
-                        tile[yDraw+section]=(leftside<<16)+rightside;
-                    }
-                }
-                
-                VDP_loadTileData(tile, innerSectionsVRAM+tileIncrementer+vramOffsetP2, 1, CPU);//VDP_loadTileData (const u32 *data, u16 index, u16 num, TransferMethod tm)
-                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, innerSectionsVRAM+tileIncrementer+vramOffsetP2), xOffset+innerConnectorRow+(innerConnectorRow>>1)+1+p2offsetX, yOffset+innerConnectorColumn+(innerConnectorColumn>>1)-1, 1, 1);
-            }
-            tileIncrementer++;
-        }
-    }
 }
 
 u8 globalSpawnCloudVisibilityTimer;//replace with SPR_getAnimationDone(sharedNextSpawnCloud) in later SGDK
 
 void setSharedNext()
 {
-//cloud sprite
-    SPR_setFrame(sharedNextSpawnCloud, 0);
+    SPR_setFrame(sharedNextSpawnCloud, 0);//cloud sprite
     SPR_setVisibility(sharedNextSpawnCloud,VISIBLE);
     globalSpawnCloudVisibilityTimer=0;
 
@@ -989,25 +377,14 @@ void drawPlayerNext(Player* player)
     {
         colorAdd=(player->nextPiece[i]-1)<<2;//multiply by 4
         VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos, playerNextyPos, 1, 1);
-/*
-        if(player==&P1)
-        {
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos-1, playerNextyPos, 1, 1);
-            //VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos-2, playerNextyPos, 1, 1);
-        }
-        else if(player==&P2)
-        {
-            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos+1, playerNextyPos, 1, 1);
-            //VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos+2, playerNextyPos, 1, 1);
-        }
-*/
+
         playerNextyPos++;        
     }
 
     drawSharedNext();
 }
 
-void doRotate(Player* player, u8 direction)
+void doCycle(Player* player, u8 direction)
 {
     u8 tempPieceHolder;
 
@@ -1089,9 +466,17 @@ void createPiece(Player* player)
     player->yPosition=ySpawn;
     player->moveDelay=0;
 
+    player->howManyDestroyed=0;
+    player->chainAmount=0;//reset chain counter
+
+    SPR_setVisibility(player->fallingPieceSprite[2],VISIBLE);//bottom piece
+    SPR_setVisibility(player->fallingPieceSprite[1],VISIBLE);//middle piece
+    SPR_setVisibility(player->fallingPieceSprite[0],VISIBLE);//top piece
+
+    
     player->flag_locking=false;
     player->flag_status=fallingPiece;
-    KLog("$$fallingPiece");
+    KLog("$fallingPiece (set in createPiece)");
 
     setSharedNext();
     drawPlayerNext(player);
@@ -1248,7 +633,278 @@ void effectFastDrop(Player* player)
         if(player->board[player->xPosition][i+1]!=0)break;
     
     player->yPosition=i;
-    player->spriteY=(i<<3)+(i<<2)+1;//player->spriteY=i*12;//MULU is not good
+    player->spriteY=(i<<3)+(i<<2)+1;//player->spriteY=i*12
 
     player->fallingIncrement=0;
+}
+
+
+void manageFalling(Player* player)
+{
+    if(collisionTest(player, BOTTOM)==false)
+    {
+        player->fallingIncrement++;
+
+        if(player->fallingIncrement>=TILESIZE)
+        {
+            player->yPosition++;
+            player->fallingIncrement=0;
+        }
+
+        player->spriteY++;
+
+        player->flag_locking=false;//reset
+    }
+    else if(player->flag_locking==false)
+    {
+        getTimer(P1fallLockingTimer,true);//start the timer
+        player->lockingLateralCounter=0;
+        player->flag_locking=true;
+
+        return;
+    }
+    else if(player->flag_locking==true)
+    {
+        if(player->fallingIncrement>TILESIZE)player->spriteY+=(TILESIZE-player->fallingIncrement);
+        if((player->lockingLateralCounter>=maxLaterals || (getTimer(P1fallLockingTimer,false)>=lockingDelayMaxTime)))pieceIntoBoard(player);
+    }
+}
+
+void pieceIntoBoard(Player* player)
+{
+    KLog("$PIECE INTO BOARD");
+//write the colors of the locked pieces into the array
+    player->board[player->xPosition][player->yPosition]=player->fallingPiece[2];
+    player->board[player->xPosition][player->yPosition-1]=player->fallingPiece[1];
+    player->board[player->xPosition][player->yPosition-2]=player->fallingPiece[0];
+
+//set falling sprites to invis
+    SPR_setVisibility(player->fallingPieceSprite[0],HIDDEN);
+    SPR_setVisibility(player->fallingPieceSprite[1],HIDDEN);
+    SPR_setVisibility(player->fallingPieceSprite[2],HIDDEN);
+
+    KLog("^^pieceIntoBoard updated the draw parameters");
+    player->drawStartX=player->xPosition;
+    player->drawStartY=player->yPosition-2;
+
+    player->drawEndX=player->xPosition+1;
+    player->drawEndY=player->yPosition+1;
+
+    player->flag_redraw=true;
+
+    if(player==&P1)
+    {
+        sprintf(debug_string,"        ");//this is to clear out the combo text
+        VDP_drawText(debug_string,2,1);
+
+        sprintf(debug_string,"        ");//this is to clear out the chain text
+        VDP_drawText(debug_string,2,2);
+    }
+
+    if(player->board[4][1]!=0)player->flag_status=toppedOut;
+    else player->flag_status=checkingMatches;
+}
+
+void processGravity(Player* player)
+{
+    u8 howMuchGravity=0;
+
+    //u8 endGravityX=0;
+    u8 firstGravityY=player->drawStartY;
+
+    for (u8 gravityX=1;gravityX<maxX+1;gravityX++)
+    //for (u8 gravityX=maxX;gravityX>0;gravityX--)
+    {
+        for (u8 gravityY=maxY;gravityY>0;gravityY--)//#define maxY 17
+        {
+            if (player->board[gravityX][gravityY]==0 && player->board[gravityX][gravityY-1]!=0)
+            {
+                player->board[gravityX][gravityY]=player->board[gravityX][gravityY-1];
+                player->board[gravityX][gravityY-1]=0;
+
+                if(gravityY<firstGravityY)firstGravityY=gravityY;
+
+                //if(endGravityX==0)endGravityX=gravityX;
+                //if(firstGravityY==0)firstGravityY=gravityY;
+
+                gravityY=maxY+1;
+
+                howMuchGravity++;
+            }
+        }
+    }
+
+    KLog("^^processGravity DID NOT update the draw parameters");
+    //KLog("^^processGravity updated the draw parameters");
+    //player->drawStartX=1;
+    //player->drawStartY=firstGravityY-1;
+
+    //player->drawEndX=maxX+1;
+    //player->drawEndY=maxY+1;
+    player->flag_redraw=true;
+
+    player->flag_status=checkingMatches;
+
+    //if(howMuchGravity>0)KLog_U1("gravity moved ",howMuchGravity);
+}
+
+void manageDelays()
+{
+    if(P1.moveDelay>0)P1.moveDelay--;
+    if(P2.moveDelay>0)P2.moveDelay--;
+
+    if(P1.cycleDelay>0)P1.cycleDelay--;
+    if(P2.cycleDelay>0)P2.cycleDelay--;
+
+    if(globalSpawnCloudVisibilityTimer<40)globalSpawnCloudVisibilityTimer++;
+}
+
+void handleInput(Player* player, u16 buttons)
+{
+    //KLog("handleinput started");
+    if(player->moveDelay==0 && player->yPosition>ySpawn)//ySpawn=0
+    {
+        if(buttons & BUTTON_LEFT && collisionTest(player, LEFT)==FALSE)
+        {
+            player->xPosition--;
+            player->moveDelay=MOVE_DELAY_AMOUNT;
+            player->spriteX-=TILESIZE;
+
+            if(player->flag_locking==true)player->lockingLateralCounter++;
+        }
+        else if(buttons & BUTTON_RIGHT && collisionTest(player, RIGHT)==FALSE)
+        {
+            player->xPosition++;
+            player->moveDelay=MOVE_DELAY_AMOUNT;
+            player->spriteX+=TILESIZE;
+
+            if(player->flag_locking==true)player->lockingLateralCounter++;
+        }
+    }
+
+    if(collisionTest(player, BOTTOM)==FALSE)
+    {
+        if (buttons & BUTTON_DOWN)
+        {
+            #define holdDownFallAmount 2
+
+            if(player->fallingIncrement<TILESIZE-holdDownFallAmount)
+            {
+                player->fallingIncrement+=holdDownFallAmount;
+                player->spriteY+=holdDownFallAmount;
+            }
+        }
+
+        //if (buttons & BUTTON_UP && player->moveDelay==0)
+        if (buttons & BUTTON_UP && player->moveDelay<=1)
+        {
+            effectFastDrop(player);
+        }
+    }
+    else if((collisionTest(player, BOTTOM)==TRUE) && (buttons & BUTTON_DOWN))player->lockingLateralCounter=maxLaterals;//lock in
+
+    if(!(buttons & BUTTON_C) && !(buttons & BUTTON_B))player->has_released_cycle=true;
+
+    if(player->cycleDelay==0 && player->has_released_cycle==true)
+    {
+        if (buttons & BUTTON_C)
+        {
+            doCycle(player, DOWN);
+            player->cycleDelay=CYCLE_DELAY_AMOUNT;
+            player->has_released_cycle=false;
+
+        }
+        else if (buttons & BUTTON_B)
+        {
+            doCycle(player, UP);
+            player->cycleDelay=CYCLE_DELAY_AMOUNT;
+            player->has_released_cycle=false;
+        }
+    }
+}
+
+void gameLogicSwitch(Player* player)
+{
+    switch(player->flag_status)
+    {
+        case spawningPiece:
+            KLog("$spawned piece");
+            createPiece(player);
+            break;
+
+        case fallingPiece:
+            if(player==&P1)handleInput(player, JOY_readJoypad(JOY_1));
+            else if(player==&P2)handleInput(player, JOY_readJoypad(JOY_2));
+            manageFalling(player);
+            break;
+
+        case checkingMatches:
+            KLog("$checkingMatches");
+            checkMatches(player);
+            break;
+
+        case blinkingMatches:
+            blinkMatches(player);
+            break;
+
+        case destroyingMatches:
+            processDestroy(player);
+            break;
+
+        case doingGravity:
+            processGravity(player);
+            break;
+    }
+}
+
+void printDebug()
+{
+    sprintf(debug_string,"%ldFPS", SYS_getFPS());
+    VDP_drawText(debug_string,13,27);
+
+    sprintf(debug_string,"%d", SYS_getCPULoad());
+    strcat(debug_string, "%");
+    strcat(debug_string, "CPU");
+    VDP_drawText(debug_string,21,27);
+
+    if(SYS_getCPULoad()>100)KLog("CPU usage over 100%");
+    //KLog_U1("CPU USAGE ",SYS_getCPULoad());
+
+    //sprintf(debug_string,"P1 %d", P1.flag_status);
+    //VDP_drawText(debug_string,32,1);
+
+    if(P1.flag_status==toppedOut)
+    {
+        sprintf(debug_string,"TOPPED OUT");
+        VDP_drawText(debug_string,1,2);
+    }
+    if(P2.flag_status==toppedOut)
+    {
+        sprintf(debug_string,"TOPPED OUT");
+        VDP_drawText(debug_string,28,2);
+    }
+}
+
+void gameOver()
+{
+    SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
+    SPR_setVisibility(P1.fallingPieceSprite[0],HIDDEN);
+    SPR_setVisibility(P1.fallingPieceSprite[1],HIDDEN);
+    SPR_setVisibility(P1.fallingPieceSprite[2],HIDDEN);
+    SPR_setVisibility(P2.fallingPieceSprite[0],HIDDEN);
+    SPR_setVisibility(P2.fallingPieceSprite[1],HIDDEN);
+    SPR_setVisibility(P2.fallingPieceSprite[2],HIDDEN);
+
+    SPR_releaseSprite(patrako_idle);
+    SPR_releaseSprite(patrako_cheer);
+
+    patrako_lost = SPR_addSpriteSafe(&patrakoLost, 106,152, TILE_ATTR(PAL2, FALSE, FALSE, FALSE));
+
+    u8 frameCounter=0;
+    while(frameCounter<30)
+    {
+        frameCounter++;
+        SYS_doVBlankProcess();
+        SPR_update();
+    }
 }
