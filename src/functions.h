@@ -24,18 +24,20 @@ typedef struct {
     s16 spriteY;
     u8 xPosition,yPosition;
 
-    u8 leftright[4][16];
-    u8 updown[7][8];
-    u8 innerconnect[4][7][2];
-
     u8 fallingIncrement;
 
+//input
     u8 moveDelay;
-
     u8 cycleDelay;
     bool has_released_cycle;
+    bool releasedStart;
 
+//drawing
     u8 drawStartX,drawStartY,drawEndX,drawEndY;
+
+    u8 leftright[16];
+    u8 updown[7];
+    u8 innerconnect[4][7][2];//are all of these necessary?
 
     u8 damageToBeReceived;
 
@@ -43,6 +45,7 @@ typedef struct {
     u8 lockingLateralCounter;
     bool flag_hard_dropped;
 
+//matching
     u8 chainAmount;
     u8 howManyMatched;//uses matchedQueue
 
@@ -58,6 +61,7 @@ typedef struct {
     u8 optionsDropStyle;
     u8 optionsNumColors;
 
+//timers
     u8 blinkTimerNum;
     u8 fallLockingTimerNum;
 } Player;
@@ -76,7 +80,7 @@ void clearBoardData(Player* player);
 void drawFallingSprite(Player* player);
 void drawFullTile(Player* player, u8 xPos, u8 yPos);
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY);
-void checkCombosAndChains(Player* player);
+void drawCombosAndChains(Player* player);
 
 void gameLogicSwitch(Player* player);
 
@@ -104,6 +108,12 @@ void blinkMatches(Player* player);
 void processAI();
 
 void startupOptionsMenu();
+
+u16 innerConnectorLUT(u16 section);
+u16 updownLUT(u16 section);
+bool updownLUTflag(u16 section);
+u16 leftrightLUT(u16 section);
+bool leftrightLUTflag(u16 section);
 
 u8 sharedNext[fallingPieceNumberOfTiles];
 u8 sharedNextStatus;
@@ -180,76 +190,76 @@ enum optionsDropStyles{
 
 void loadTiles()
 {
-    VDP_loadFontData(tileset_Font.tiles, 96, CPU);//font uses symbols we might never need, wasteful
+    VDP_loadFontData(tileset_Font.tiles, 96, DMA);//font uses symbols we might never need, wasteful
     
-    VDP_loadTileSet(fullblock_color1.tileset,1,CPU);
-    VDP_loadTileSet(fullblock_color2.tileset,1+(ADDAMOUNT*1),CPU);
-    VDP_loadTileSet(fullblock_color3.tileset,1+(ADDAMOUNT*2),CPU);
-    VDP_loadTileSet(fullblock_color4.tileset,1+(ADDAMOUNT*3),CPU);
-    VDP_loadTileSet(fullblock_color5.tileset,1+(ADDAMOUNT*4),CPU);
-    VDP_loadTileSet(fullblock_color6.tileset,1+(ADDAMOUNT*5),CPU);
+    VDP_loadTileSet(fullblock_color1.tileset,1,DMA);
+    VDP_loadTileSet(fullblock_color2.tileset,1+(ADDAMOUNT*1),DMA);
+    VDP_loadTileSet(fullblock_color3.tileset,1+(ADDAMOUNT*2),DMA);
+    VDP_loadTileSet(fullblock_color4.tileset,1+(ADDAMOUNT*3),DMA);
+    VDP_loadTileSet(fullblock_color5.tileset,1+(ADDAMOUNT*4),DMA);
+    VDP_loadTileSet(fullblock_color6.tileset,1+(ADDAMOUNT*5),DMA);
 
-    VDP_loadTileSet(topblock_color1.tileset,2,CPU);
-    VDP_loadTileSet(topblock_color2.tileset,2+(ADDAMOUNT*1),CPU);
-    VDP_loadTileSet(topblock_color3.tileset,2+(ADDAMOUNT*2),CPU);
-    VDP_loadTileSet(topblock_color4.tileset,2+(ADDAMOUNT*3),CPU);
-    VDP_loadTileSet(topblock_color5.tileset,2+(ADDAMOUNT*4),CPU);
-    VDP_loadTileSet(topblock_color6.tileset,2+(ADDAMOUNT*5),CPU);
+    VDP_loadTileSet(topblock_color1.tileset,2,DMA);
+    VDP_loadTileSet(topblock_color2.tileset,2+(ADDAMOUNT*1),DMA);
+    VDP_loadTileSet(topblock_color3.tileset,2+(ADDAMOUNT*2),DMA);
+    VDP_loadTileSet(topblock_color4.tileset,2+(ADDAMOUNT*3),DMA);
+    VDP_loadTileSet(topblock_color5.tileset,2+(ADDAMOUNT*4),DMA);
+    VDP_loadTileSet(topblock_color6.tileset,2+(ADDAMOUNT*5),DMA);
 
-    VDP_loadTileSet(rightblock_color1.tileset,3,CPU);
-    VDP_loadTileSet(rightblock_color2.tileset,3+(ADDAMOUNT*1),CPU);
-    VDP_loadTileSet(rightblock_color3.tileset,3+(ADDAMOUNT*2),CPU);
-    VDP_loadTileSet(rightblock_color4.tileset,3+(ADDAMOUNT*3),CPU);
-    VDP_loadTileSet(rightblock_color5.tileset,3+(ADDAMOUNT*4),CPU);
-    VDP_loadTileSet(rightblock_color6.tileset,3+(ADDAMOUNT*5),CPU);
+    VDP_loadTileSet(rightblock_color1.tileset,3,DMA);
+    VDP_loadTileSet(rightblock_color2.tileset,3+(ADDAMOUNT*1),DMA);
+    VDP_loadTileSet(rightblock_color3.tileset,3+(ADDAMOUNT*2),DMA);
+    VDP_loadTileSet(rightblock_color4.tileset,3+(ADDAMOUNT*3),DMA);
+    VDP_loadTileSet(rightblock_color5.tileset,3+(ADDAMOUNT*4),DMA);
+    VDP_loadTileSet(rightblock_color6.tileset,3+(ADDAMOUNT*5),DMA);
 
-    VDP_loadTileSet(cornerblock_color1.tileset,4,CPU);
-    VDP_loadTileSet(cornerblock_color2.tileset,4+(ADDAMOUNT*1),CPU);
-    VDP_loadTileSet(cornerblock_color3.tileset,4+(ADDAMOUNT*2),CPU);
-    VDP_loadTileSet(cornerblock_color4.tileset,4+(ADDAMOUNT*3),CPU);
-    VDP_loadTileSet(cornerblock_color5.tileset,4+(ADDAMOUNT*4),CPU);
-    VDP_loadTileSet(cornerblock_color6.tileset,4+(ADDAMOUNT*5),CPU);
+    VDP_loadTileSet(cornerblock_color1.tileset,4,DMA);
+    VDP_loadTileSet(cornerblock_color2.tileset,4+(ADDAMOUNT*1),DMA);
+    VDP_loadTileSet(cornerblock_color3.tileset,4+(ADDAMOUNT*2),DMA);
+    VDP_loadTileSet(cornerblock_color4.tileset,4+(ADDAMOUNT*3),DMA);
+    VDP_loadTileSet(cornerblock_color5.tileset,4+(ADDAMOUNT*4),DMA);
+    VDP_loadTileSet(cornerblock_color6.tileset,4+(ADDAMOUNT*5),DMA);
 
-    VDP_loadTileSet(leftright12.tileset,extra_tiles_start+0,CPU);//1,2
-    VDP_loadTileSet(leftright13.tileset,extra_tiles_start+1,CPU);//1,3
-    VDP_loadTileSet(leftright14.tileset,extra_tiles_start+2,CPU);
-    VDP_loadTileSet(leftright15.tileset,extra_tiles_start+3,CPU);
-    VDP_loadTileSet(leftright16.tileset,extra_tiles_start+4,CPU);
+    VDP_loadTileSet(leftright12.tileset,extra_tiles_start+0,DMA);//1,2
+    VDP_loadTileSet(leftright13.tileset,extra_tiles_start+1,DMA);//1,3
+    VDP_loadTileSet(leftright14.tileset,extra_tiles_start+2,DMA);
+    VDP_loadTileSet(leftright15.tileset,extra_tiles_start+3,DMA);
+    VDP_loadTileSet(leftright16.tileset,extra_tiles_start+4,DMA);
 
-    VDP_loadTileSet(leftright23.tileset,extra_tiles_start+5,CPU);//2,3
-    VDP_loadTileSet(leftright24.tileset,extra_tiles_start+6,CPU);
-    VDP_loadTileSet(leftright25.tileset,extra_tiles_start+7,CPU);
-    VDP_loadTileSet(leftright26.tileset,extra_tiles_start+8,CPU);
+    VDP_loadTileSet(leftright23.tileset,extra_tiles_start+5,DMA);//2,3
+    VDP_loadTileSet(leftright24.tileset,extra_tiles_start+6,DMA);
+    VDP_loadTileSet(leftright25.tileset,extra_tiles_start+7,DMA);
+    VDP_loadTileSet(leftright26.tileset,extra_tiles_start+8,DMA);
 
-    VDP_loadTileSet(leftright34.tileset,extra_tiles_start+9,CPU);
-    VDP_loadTileSet(leftright35.tileset,extra_tiles_start+10,CPU);
-    VDP_loadTileSet(leftright36.tileset,extra_tiles_start+11,CPU);
+    VDP_loadTileSet(leftright34.tileset,extra_tiles_start+9,DMA);
+    VDP_loadTileSet(leftright35.tileset,extra_tiles_start+10,DMA);
+    VDP_loadTileSet(leftright36.tileset,extra_tiles_start+11,DMA);
 
-    VDP_loadTileSet(leftright45.tileset,extra_tiles_start+12,CPU);
-    VDP_loadTileSet(leftright46.tileset,extra_tiles_start+13,CPU);
+    VDP_loadTileSet(leftright45.tileset,extra_tiles_start+12,DMA);
+    VDP_loadTileSet(leftright46.tileset,extra_tiles_start+13,DMA);
 
-    VDP_loadTileSet(leftright56.tileset,extra_tiles_start+14,CPU);
+    VDP_loadTileSet(leftright56.tileset,extra_tiles_start+14,DMA);
 
 
-    VDP_loadTileSet(updown12.tileset,extra_tiles_start+15,CPU);//1,2
-    VDP_loadTileSet(updown13.tileset,extra_tiles_start+16,CPU);//1,3
-    VDP_loadTileSet(updown14.tileset,extra_tiles_start+17,CPU);
-    VDP_loadTileSet(updown15.tileset,extra_tiles_start+18,CPU);
-    VDP_loadTileSet(updown16.tileset,extra_tiles_start+19,CPU);
+    VDP_loadTileSet(updown12.tileset,extra_tiles_start+15,DMA);//1,2
+    VDP_loadTileSet(updown13.tileset,extra_tiles_start+16,DMA);//1,3
+    VDP_loadTileSet(updown14.tileset,extra_tiles_start+17,DMA);
+    VDP_loadTileSet(updown15.tileset,extra_tiles_start+18,DMA);
+    VDP_loadTileSet(updown16.tileset,extra_tiles_start+19,DMA);
 
-    VDP_loadTileSet(updown23.tileset,extra_tiles_start+20,CPU);//2,3
-    VDP_loadTileSet(updown24.tileset,extra_tiles_start+21,CPU);
-    VDP_loadTileSet(updown25.tileset,extra_tiles_start+22,CPU);
-    VDP_loadTileSet(updown26.tileset,extra_tiles_start+23,CPU);
+    VDP_loadTileSet(updown23.tileset,extra_tiles_start+20,DMA);//2,3
+    VDP_loadTileSet(updown24.tileset,extra_tiles_start+21,DMA);
+    VDP_loadTileSet(updown25.tileset,extra_tiles_start+22,DMA);
+    VDP_loadTileSet(updown26.tileset,extra_tiles_start+23,DMA);
 
-    VDP_loadTileSet(updown34.tileset,extra_tiles_start+24,CPU);
-    VDP_loadTileSet(updown35.tileset,extra_tiles_start+25,CPU);
-    VDP_loadTileSet(updown36.tileset,extra_tiles_start+26,CPU);
+    VDP_loadTileSet(updown34.tileset,extra_tiles_start+24,DMA);
+    VDP_loadTileSet(updown35.tileset,extra_tiles_start+25,DMA);
+    VDP_loadTileSet(updown36.tileset,extra_tiles_start+26,DMA);
 
-    VDP_loadTileSet(updown45.tileset,extra_tiles_start+27,CPU);
-    VDP_loadTileSet(updown46.tileset,extra_tiles_start+28,CPU);
+    VDP_loadTileSet(updown45.tileset,extra_tiles_start+27,DMA);
+    VDP_loadTileSet(updown46.tileset,extra_tiles_start+28,DMA);
 
-    VDP_loadTileSet(updown56.tileset,extra_tiles_start+29,CPU);
+    VDP_loadTileSet(updown56.tileset,extra_tiles_start+29,DMA);
 
     PAL_setPalette(PAL3,fallingSingleAll.palette->data,DMA);
 }
@@ -504,9 +514,9 @@ void createPiece(Player* player)
         SPR_setFrame(player->fallingPieceSprite[createIndex],player->fallingPiece[createIndex]-1);
 
         player->nextPiece[createIndex]=sharedNext[createIndex];
-        if(player->optionsNumColors==4 && player->nextPiece[createIndex]==5)
+        if(player->optionsNumColors==4 && player->nextPiece[createIndex]==globalNumColors-1)
         {
-            player->nextPiece[createIndex]=randomRange(1,4);
+            player->nextPiece[createIndex]=randomRange(1,globalNumColors-2);
         }
     }
 
@@ -605,10 +615,7 @@ void checkMatches(Player* player)
 
                 if(player->board[checkX][checkY]==player->board[checkX+1][checkY-1])//match diagonally up 2 tiles
                 {
-                    //KLog("init match - diagUP");
-                    //sprintf(debug_string,"init diagUp match at %d,%d",checkX,checkY);
-                    //VDP_drawText(debug_string,13,28);
-
+                    KLog_U2("++init match - diagUP at ",checkX,",",checkY);
                     connectionAmount=2;
                     connectionColor=player->board[checkX][checkY];
                     
@@ -640,7 +647,7 @@ void checkMatches(Player* player)
 
                 if(player->board[checkX][checkY]==player->board[checkX+1][checkY+1])//match diagonally down 2 tiles
                 {
-                    //KLog("INIT match - diagDOWN");
+                    KLog_U2("++init match - diagDOWN at ",checkX,",",checkY);
                     connectionAmount=2;
                     connectionColor=player->board[checkX][checkY];
 
@@ -672,7 +679,7 @@ void checkMatches(Player* player)
         }
     }
     if(player->flag_status!=blinkingMatches)player->flag_status=spawningPiece;//there were no connections
-    if(player==&P1)KLog_U1("()()()howManyMatched: ",player->howManyMatched);
+    //if(player==&P1)KLog_U1("()()()howManyMatched: ",player->howManyMatched);
 }
 
 /*
@@ -825,8 +832,6 @@ void processGravity(Player* player)
         player->flag_status=spawningPiece;
     }
 
-    
-
     //if(howMuchGravity>0)KLog_U1("gravity moved ",howMuchGravity);
 }
 
@@ -903,6 +908,15 @@ void handleInput(Player* player, u16 buttons)
             player->has_released_cycle=false;
         }
     }
+
+//DISCARD-SKIP with start button
+    if((buttons & BUTTON_START) && player->releasedStart==true)
+    {
+        createPiece(player);
+        player->releasedStart=false;
+    }
+//reset START button held
+    if(!(buttons & BUTTON_START) && player->releasedStart==false)player->releasedStart=true;
 }
 
 void gameLogicSwitch(Player* player)
@@ -916,7 +930,7 @@ void gameLogicSwitch(Player* player)
 
         case fallingPiece:
             if(player==&P1)handleInput(player, JOY_readJoypad(JOY_1));
-            else if(player==&P2)handleInput(player, JOY_readJoypad(JOY_2));
+            else if(player==&P2 && P2.AIplayer==false)handleInput(player, JOY_readJoypad(JOY_2));
             manageFalling(player);
             break;
 
@@ -1028,14 +1042,6 @@ void startupOptionsMenu()
     bool selectedArrowsToggle=true;
     u8 selectedArrowsToggleCounter=0;
     P1.optionsNumColors=5;//turn this option to 5 by default
-
-    /*
-    enum optionsDropStyles{
-        OFF,
-        SONIC,
-        HARD
-    };
-    */
 
     #define counterMaxAmount 6
 
@@ -1217,15 +1223,13 @@ void startupOptionsMenu()
     }
 }
 
-void checkCombosAndChains(Player* player)
+void drawCombosAndChains(Player* player)
 {
     u8 xPosShiftP2=0;
     if(player==&P2)xPosShiftP2=PLAYER2OFFSET;
 
-    //if(player->howManyDestroyed>3)
     if(player->howManyMatched>3)
     {
-        //sprintf(debug_string,"COMBO:%d",player->howManyDestroyed);
         sprintf(debug_string,"COMBO:%d",player->howManyMatched);
         VDP_drawText(debug_string,2+xPosShiftP2,1);
     }
@@ -1245,4 +1249,156 @@ void checkCombosAndChains(Player* player)
         sprintf(debug_string,"        ");//this is to clear out the chain text
         VDP_drawText(debug_string,2+xPosShiftP2,2);
     }
+}
+
+u8 AIdirection=0;//left or right
+
+void processAI()
+{
+    if(P2.flag_status==fallingPiece)
+    {
+        if(AIdirection==0)AIdirection=randomRange(1,2);
+//lateral movement
+        if(AIdirection==1)
+        {
+            if(P2.AIspawnCalc==true)
+            {
+                u8 j;
+                for(u8 i=xSpawn;i>0;i--)
+                {
+                    for(j=1;j<maxY;j++)
+                    {
+                        if(P2.board[i][j]!=0)
+                        {
+                            P2.AIcolumnview[i]=j;
+                            //KLog_U2("[AI] column ",i," set as height ",j);
+                            break;
+                        }
+                    }
+                }
+                P2.AIspawnCalc=false;
+            }
+
+            //simulate inputs
+            if(collisionTest(&P2, LEFT)==FALSE && (P2.AIcolumnview[P2.xPosition-1]>=P2.AIcolumnview[P2.xPosition]))
+            {
+                //KLog_U4("[AI] moving from Column:",P2.xPosition," with ",P2.AIcolumnview[P2.xPosition]," to Column:",P2.xPosition-1," with ",P2.AIcolumnview[P2.xPosition-1]);
+                P2.xPosition--;
+                P2.moveDelay=MOVE_DELAY_AMOUNT;
+                P2.spriteX-=TILESIZE;
+            }                
+        }
+        else if(AIdirection==2)
+        {
+            if(P2.AIspawnCalc==true)
+            {
+                u8 j;
+                for(u8 i=xSpawn;i<maxX+1;i++)
+                {
+                    for(j=1;j<maxY;j++)
+                    {
+                        if(P2.board[i][j]!=0)
+                        {
+                            P2.AIcolumnview[i]=j;
+                            //KLog_U2("[AI] column ",i," set as height ",j);
+                            break;
+                        }
+                    }
+                }
+                P2.AIspawnCalc=false;
+            }
+
+            if(collisionTest(&P2, RIGHT)==FALSE && (P2.AIcolumnview[P2.xPosition+1]>=P2.AIcolumnview[P2.xPosition]))
+            {
+                P2.xPosition++;
+                P2.moveDelay=MOVE_DELAY_AMOUNT;
+                P2.spriteX+=TILESIZE;
+            }
+        }
+
+//cycling
+        if(P2.cycleDelay==0 && P2.has_released_cycle==true)
+        {
+            if(P1.has_released_cycle==false || P1.moveDelay==MOVE_DELAY_AMOUNT || P1.flag_status==spawningPiece)
+            {
+                doCycle(&P2, DOWN);
+                P2.cycleDelay=CYCLE_DELAY_AMOUNT;
+                P2.has_released_cycle=false;
+            }
+            if(P2.yPosition==4 || P2.yPosition==10)
+            {
+                doCycle(&P2, UP);
+                P2.cycleDelay=CYCLE_DELAY_AMOUNT;
+                P2.has_released_cycle=false;               
+            }
+        }
+    }
+
+    if(P2.flag_status==checkingMatches)
+    {
+        P2.AIspawnCalc=true;
+        AIdirection=0;
+    }
+}
+
+u16 updownLUT(u16 section)
+{
+    static const u16 lookup[103]=
+    {0,        2,        2+ADDAMOUNT,        2+ADDAMOUNT2,        2+ADDAMOUNT3,        2+ADDAMOUNT4,        2+ADDAMOUNT5,        0,        0,        0,        0,        0,        0,        0,        0,        0,        2,        1,        extra_tiles_start+15,        extra_tiles_start+16,        extra_tiles_start+17,        extra_tiles_start+18,        extra_tiles_start+19,        0,        0,        0,        0,        0,        0,        0,        0,        0,        2+ADDAMOUNT,        extra_tiles_start+15,        1+ADDAMOUNT,        extra_tiles_start+20,        extra_tiles_start+21,        extra_tiles_start+22,        extra_tiles_start+23,        0,        0,        0,        0,        0,        0,        0,        0,        0,        2+ADDAMOUNT2,        extra_tiles_start+16,        extra_tiles_start+20,        1+ADDAMOUNT2,        extra_tiles_start+24,        extra_tiles_start+25,        extra_tiles_start+26,        0,        0,        0,        0,        0,        0,        0,        0,        0,        2+ADDAMOUNT3,        extra_tiles_start+17,        extra_tiles_start+21,        extra_tiles_start+24,        1+ADDAMOUNT3,        extra_tiles_start+27,        extra_tiles_start+28,        0,        0,        0,        0,        0,        0,        0,        0,        0,        2+ADDAMOUNT4,        extra_tiles_start+18,        extra_tiles_start+22,        extra_tiles_start+25,        extra_tiles_start+27,        1+ADDAMOUNT4,        extra_tiles_start+29,        0,        0,        0,        0,        0,        0,        0,        0,        0,        2+ADDAMOUNT5,        extra_tiles_start+19,        extra_tiles_start+23,        extra_tiles_start+26,        extra_tiles_start+28,        extra_tiles_start+29,        1+ADDAMOUNT5
+    };
+
+    section=lookup[section];
+
+    return section;
+}
+
+bool updownLUTflag(u16 section)
+{
+    static const bool lookup[103]=
+    {0,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,TRUE,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,TRUE,TRUE,0,0,0,0,0,0,0,0,0,0,0,0,0,0,TRUE,TRUE,TRUE,0,0,0,0,0,0,0,0,0,0,0,0,0,TRUE,TRUE,TRUE,TRUE,0,0,0,0,0,0,0,0,0,0,0,0,TRUE,TRUE,TRUE,TRUE,TRUE,0,
+    };
+
+    bool returnFlag=lookup[section];
+
+    return returnFlag;
+}
+
+u16 leftrightLUT(u16 section)
+{
+    static const u16 lookup[103]=
+    {0,        3,        3+ADDAMOUNT,        3+ADDAMOUNT2,        3+ADDAMOUNT3,        3+ADDAMOUNT4,        3+ADDAMOUNT5,        0,        0,        0,        0,        0,        0,        0,        0,        0,        3,        1,        extra_tiles_start+0,        extra_tiles_start+1,        extra_tiles_start+2,        extra_tiles_start+3,        extra_tiles_start+4,        0,        0,        0,        0,        0,        0,        0,        0,        0,        3+ADDAMOUNT,        extra_tiles_start+0,        1+ADDAMOUNT,        extra_tiles_start+5,        extra_tiles_start+6,        extra_tiles_start+7,        extra_tiles_start+8,        0,        0,        0,        0,        0,        0,        0,        0,        0,        3+ADDAMOUNT2,        extra_tiles_start+1,        extra_tiles_start+5,        1+ADDAMOUNT2,        extra_tiles_start+9,        extra_tiles_start+10,        extra_tiles_start+11,        0,        0,        0,        0,        0,        0,        0,        0,        0,        3+ADDAMOUNT3,        extra_tiles_start+2,        extra_tiles_start+6,        extra_tiles_start+9,        1+ADDAMOUNT3,        extra_tiles_start+12,        extra_tiles_start+13,        0,        0,        0,        0,        0,        0,        0,        0,        0,        3+ADDAMOUNT4,        extra_tiles_start+3,        extra_tiles_start+7,        extra_tiles_start+10,        extra_tiles_start+12,        1+ADDAMOUNT4,        extra_tiles_start+14,        0,        0,        0,        0,        0,        0,        0,        0,        0,        3+ADDAMOUNT5,        extra_tiles_start+4,        extra_tiles_start+8,        extra_tiles_start+11,        extra_tiles_start+13,        extra_tiles_start+14,        1+ADDAMOUNT5
+    };
+
+    section=lookup[section];
+
+    return section;
+}
+
+bool leftrightLUTflag(u16 section)
+{
+    static const bool lookup[103]=
+    {0,        FALSE,        FALSE,        FALSE,        FALSE,        FALSE,        FALSE,        0,        0,        0,        0,        0,        0,        0,        0,        0,        TRUE,        FALSE,        FALSE,        FALSE,        FALSE,        FALSE,        FALSE,        0,        0,        0,        0,        0,        0,        0,        0,        0,        TRUE,        TRUE,        TRUE,        FALSE,        FALSE,        FALSE,        FALSE,        0,        0,        0,        0,        0,        0,        0,        0,        0,        TRUE,        TRUE,        TRUE,        FALSE,        FALSE,        FALSE,        FALSE,        0,        0,        0,        0,        0,        0,        0,        0,        0,        TRUE,        TRUE,        TRUE,        TRUE,        FALSE,        FALSE,        FALSE,        0,        0,        0,        0,        0,        0,        0,        0,        0,        TRUE,        TRUE,        TRUE,        TRUE,        TRUE,        FALSE,        FALSE,        0,        0,        0,        0,        0,        0,        0,        0,        0,        TRUE,        TRUE,        TRUE,        TRUE,        TRUE,        TRUE,        FALSE,
+    };
+
+    bool returnFlag=lookup[section];
+
+    return returnFlag;
+}
+
+u16 innerConnectorLUT(u16 section)
+{
+    #define allcolor1 0x4444
+    #define allcolor2 0x5555
+    #define allcolor3 0x6666
+    #define allcolor4 0x7777
+    #define allcolor5 0x8888
+    #define allgarbage 0x9999
+    #define allblank   0x0000
+
+    static const u16 lookup[8]=
+    {0,allcolor1,allcolor2,allcolor3,allcolor4,allcolor5,allgarbage,allblank};
+
+    section=lookup[section];
+
+    return section;
 }
