@@ -20,12 +20,23 @@ int main()
 
     loadTiles();
 
-    PAL_setPalette(PAL3,fallingSingleAll.palette->data,DMA);//VDP_setPalette(PAL3,fallingSingleAll.palette->data);
-    VDP_setTextPalette(PAL3);
+    setRandomSeed(GET_HVCOUNTER*GET_VCOUNTER*GET_HCOUNTER);
 
-    VDP_drawImageEx(BG_B,&gridbg,0x57E,0,0,TRUE,TRUE);//font uses symbols we might never need, wasteful
+    VDP_drawImageEx(BG_B,&gridbg,0x58d,0,0,TRUE,TRUE);//0x57E,58c
+    PAL_setPalette(PAL0,cloud.palette->data,DMA);
+    PAL_setColor(0,RGB8_8_8_TO_VDPCOLOR(255,255,255));
+
+    VDP_setTextPalette(1);
 
     SYS_enableInts();
+
+    startupOptionsMenu();
+
+    VDP_setTextPalette(0);
+    PAL_setColor(1,RGB8_8_8_TO_VDPCOLOR(1,1,1));//grid outline
+    PAL_setColor(2,RGB8_8_8_TO_VDPCOLOR(96,96,85));//tiles at the bottom
+    PAL_setColor(3,RGB8_8_8_TO_VDPCOLOR(randomRange(49,100),randomRange(49,100),randomRange(80,130)));//49,75,122//background
+    PAL_setColor(4,RGB8_8_8_TO_VDPCOLOR(172,199,227));//inside the fields
 
     SPR_init();
 
@@ -37,25 +48,23 @@ int main()
 
     //loadDebugFieldData();
 
-    //while(P1.flag_status!=toppedOut && P2.flag_status!=toppedOut)
-    while(P1.flag_status!=toppedOut)
+    while(P1.flag_status!=toppedOut && P2.flag_status!=toppedOut)
+    //while(P1.flag_status!=toppedOut)
     {
         manageDelays();
 
         gameLogicSwitch(&P1);
+        gameLogicSwitch(&P2);
+
+        if(P2.AIplayer==true)processAI();
 
         SYS_doVBlankProcess();
 
-        if(P1.howManyDestroyed>3){
-            sprintf(debug_string,"COMBO:%d",P1.howManyDestroyed);
-            VDP_drawText(debug_string,2,1);
-        }
+        checkCombosAndChains(&P1);//this needs to be restricted
+        checkCombosAndChains(&P2);//this needs to be restricted
 
-        if(P1.chainAmount>1)
+        if(P1.chainAmount>1 && P1.flag_status<=fallingPiece)
         {
-            sprintf(debug_string,"CHAIN:%d",P1.chainAmount);
-            VDP_drawText(debug_string,2,2);
-
             SPR_setVisibility(patrako_cheer,VISIBLE);
             SPR_setVisibility(patrako_idle,HIDDEN);
             SPR_setFrame(patrako_cheer,0);
@@ -64,15 +73,23 @@ int main()
         }
 
         if(P1.flag_status==fallingPiece)drawFallingSprite(&P1);//only draw if we're falling
+        if(P2.flag_status==fallingPiece)drawFallingSprite(&P2);//only draw if we're falling
         
+        if(P1.flag_drawNext==true){drawPlayerNext(&P1);P1.flag_drawNext=false;}
+        if(P2.flag_drawNext==true){drawPlayerNext(&P2);P2.flag_drawNext=false;}
+
         if(P1.flag_redraw==true){
             //printBoard(&P1, 1,1,maxX+1,maxY+2);
             printBoard(&P1, P1.drawStartX,P1.drawStartY,P1.drawEndX,P1.drawEndY);
-            
-            if(P1.flag_status==spawningPiece)drawPlayerNext(&P1);
-
             P1.flag_redraw=false;
         }
+
+        if(P2.flag_redraw==true){
+            printBoard(&P2, P2.drawStartX,P2.drawStartY,P2.drawEndX,P2.drawEndY);
+            P2.flag_redraw=false;
+        }
+
+        if(sharedNextStatus==1)drawSharedNext();
 
         if(globalSpawnCloudVisibilityTimer>20)SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
 
@@ -94,183 +111,150 @@ int main()
     return 0;
 }
 
-void processDestroy(Player* player)//we ONLY get here if we are destroying tiles
-{
-    KLog("processDestroy just started");
-    player->chainAmount++;
-    //u8 howManyDestroyed=0;
-
-/*
-    player->drawStartX-=1;
-    player->drawEndX+=1;
-    player->drawStartY-=1;
-    player->drawEndY+=1;
-*/
-
-    for (u8 destroyX=1;destroyX<maxX+1;destroyX++)
-    {
-        for (u8 destroyY=1;destroyY<maxY+1;destroyY++)
-        {
-            if (player->boardDestructionQueue[destroyX][destroyY])
-            {
-//check the surrounding for garbage to be transformed
-                if(player->board[destroyX+1][destroyY]==COLOR_GARBAGE){player->board[destroyX+1][destroyY]=player->board[destroyX][destroyY];player->flag_status=checkingMatches;}
-                if(player->board[destroyX][destroyY+1]==COLOR_GARBAGE){player->board[destroyX][destroyY+1]=player->board[destroyX][destroyY];player->flag_status=checkingMatches;}
-                if(player->board[destroyX-1][destroyY]==COLOR_GARBAGE){player->board[destroyX-1][destroyY]=player->board[destroyX][destroyY];player->flag_status=checkingMatches;}
-                if(player->board[destroyX][destroyY-1]==COLOR_GARBAGE){player->board[destroyX][destroyY-1]=player->board[destroyX][destroyY];player->flag_status=checkingMatches;}
-
-                player->board[destroyX][destroyY]=0;
-                player->boardDestructionQueue[destroyX][destroyY]=false;
-                player->howManyDestroyed++;
-
-                if(destroyX<player->drawStartX){
-                    player->drawStartX=destroyX;
-                    KLog("^^processDestroy updated the draw parameters (drawStartX)");                    
-                }
-                else if(destroyX>player->drawEndX){
-                    player->drawEndX=destroyX;
-                    KLog("^^processDestroy updated the draw parameters (drawEndX)");
-                }
-
-                if(destroyY<player->drawStartY){
-                    player->drawStartY=destroyY;
-                    KLog("^^processDestroy updated the draw parameters (drawStartY)");
-                }
-                else if(destroyY>player->drawEndY){
-                    player->drawEndY=destroyY;
-                    KLog("^^processDestroy updated the draw parameters (drawEndY)");
-                }
-            }
-        }
-    }
-
-    player->flag_status=doingGravity;
-
-/*
-    if(howManyDestroyed>3 && player==&P1)//NEEDS TO GO AFTER VBLANK
-    {
-        sprintf(debug_string,"COMBO:%d",howManyDestroyed);
-        VDP_drawText(debug_string,2,1);
-    }
-*/
-}
-
-u8 blinkingSave[9][18];
-#define blinkingTimeAmt 8000
-#define blinkNumOfTimes 16
-
 void blinkMatches(Player* player)
 {
-/*
-    //u8 temp1,temp2,temp3,temp4;
+    #define blinkingTimeAmt 6000
+    #define blinkNumOfTimes 8
 
-    KLog("$^^blinkMatches!!!");
-    if(player->blinkTimes==0)
+    //KLog("$^^blinkMatches!!!");
+    if(player->blinkTimes==0)//initialization
     {
-    
-//save the drawParameters?
-    //temp1=player->drawStartX;
-    //temp2=player->drawStartY;
-    //temp3=player->drawEndX;
-    //temp4=player->drawEndY;
-    
+        KLog("^^blinkmatches set draw parameters to FULL BOARD");
+        player->drawStartX=maxX;
+        player->drawEndX=1;
+        player->drawStartY=maxY;
+        player->drawEndY=1;
+
 //start the timer
-        getTimer(P1_blink_timer,true);
+        getTimer(player->blinkTimerNum,true);
 
-//save the color of the pieces beyond destroyed
-        for(u8 i=1;i<maxX;i++)
+        for(u8 i=0;i<player->howManyMatched;i++)//don't iterate through the entire board, only the destruction queue pieces
         {
-            for(u8 j=1;j<maxY;j++)
-            {
-                if(player->boardDestructionQueue[i][j]==true)blinkingSave[i][j]=player->board[i][j];
-            }
+//update the drawing boundaries
+            if(player->matchedQueueX[i]<player->drawStartX)
+                {
+                    player->drawStartX=player->matchedQueueX[i];
+                    KLog_U1("^^drawStartX updated to: ",player->drawStartX);
+                }
+            if(player->matchedQueueX[i]>player->drawEndX)
+                {
+                    player->drawEndX=player->matchedQueueX[i];
+                    KLog_U1("^^drawEndX updated to: ",player->drawEndX);
+                }
+            if(player->matchedQueueY[i]<player->drawStartY)
+                {
+                    player->drawStartY=player->matchedQueueY[i];
+                    KLog_U1("^^drawStartY updated to: ",player->drawStartY);
+                }
+            if(player->matchedQueueY[i]>player->drawEndY)
+                {
+                    player->drawEndY=player->matchedQueueY[i];
+                    KLog_U1("^^drawEndY updated to: ",player->drawEndY);
+                }
+            
+//save the cleared pieces to blinkingSave array
+                player->blinkingSave[player->matchedQueueX[i]][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
         }
-
-    player->blinkTimes++;
+    
+        player->drawStartX--;KLog_U2("manual update of drawStartX from ",player->drawStartX+1," to ",player->drawStartX);
+        player->drawEndX++;KLog_U2("manual update of drawEndX from ",player->drawEndX-1," to ",player->drawEndX);
+        player->drawStartY--;KLog_U2("manual update of drawStartY from ",player->drawStartY+1," to ",player->drawStartY);
+        player->drawEndY++;KLog_U2("manual update of drawEndY from ",player->drawEndY-1," to ",player->drawEndY);
+        
+        player->blinkTimes++;
     }
 
-    if(getTimer(P1_blink_timer,false)>=blinkingTimeAmt && player->blinkTimes<blinkNumOfTimes)
+    if(getTimer(player->blinkTimerNum,false)>=blinkingTimeAmt && player->blinkTimes<blinkNumOfTimes)
     {
-        player->blinkTimes++;
-        getTimer(P1_blink_timer,true);
+        player->blinkTimes++;//increment the blinking number
+        getTimer(player->blinkTimerNum,true);//reset the timer
 
-        if((player->blinkTimes & 1) == 0)
+        if((player->blinkTimes & 1) == 0)//if blinktimes is even
         {
-            for(u8 i=1;i<maxX;i++)
+            for(u8 i=0;i<player->howManyMatched;i++)
             {
-                for(u8 j=1;j<maxY;j++)
-                {
-                    if(player->boardDestructionQueue[i][j]==true)player->board[i][j]=blinkingSave[i][j];
-                }
-            }     
+                player->board[player->matchedQueueX[i]][player->matchedQueueY[i]]=player->blinkingSave[player->matchedQueueX[i]][player->matchedQueueY[i]];
+            }
         }
-        else if((player->blinkTimes & 1) != 0)
+        else if((player->blinkTimes & 1) != 0)//if blinktimes is odd
         {
-            for(u8 i=1;i<maxX;i++)
+            for(u8 i=0;i<player->howManyMatched;i++)
             {
-                for(u8 j=1;j<maxY;j++)
-                {
-                    if(player->boardDestructionQueue[i][j]==true)player->board[i][j]=0;
-                }
-            }              
+                player->board[player->matchedQueueX[i]][player->matchedQueueY[i]]=0;
+            }    
         }
 
-        player->drawStartX=1;
-        player->drawStartY=1;
-        player->drawEndX=maxX;
-        player->drawEndY=maxY+1;
-
+        KLog_U4("^^blink drawing ",player->drawStartX,",",player->drawEndX," | ",player->drawStartY,",",player->drawEndY);
         player->flag_redraw=true;
         return;
     }
     else if(player->blinkTimes>=blinkNumOfTimes)
         {
-//restore the pieces
-            for(u8 i=1;i<maxX;i++)
+//restore the pieces so they can be properly destroyed
+            for(u8 i=0;i<player->howManyMatched;i++)
             {
-                for(u8 j=1;j<maxY;j++)
-                {
-                    if(player->boardDestructionQueue[i][j]==true)player->board[i][j]=blinkingSave[i][j];
-                }
-            }     
-
-//restore the draw parameters    
-            //player->drawStartX=temp1;
-            //player->drawStartY=temp2;
-            //player->drawEndX=temp3;
-            //player->drawEndY=temp4;
+                player->board[player->matchedQueueX[i]][player->matchedQueueY[i]]=player->blinkingSave[player->matchedQueueX[i]][player->matchedQueueY[i]];
+//reset blinkingSave array (necessary?)
+                player->blinkingSave[player->matchedQueueX[i]][player->matchedQueueY[i]]=0;
+            }
 
             player->flag_redraw=true;
 
             player->flag_status=destroyingMatches;
             player->blinkTimes=0;
         }
-*/
-    player->flag_status=destroyingMatches;
 }
 
+void processDestroy(Player* player)//we ONLY get here if we are destroying tiles
+{
+    KLog("processDestroy just started");
+    player->chainAmount++;
+
+    for (u8 i=0;i<player->howManyMatched;i++)
+    {
+//check the surrounding for garbage to be transformed
+        if(player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]==COLOR_GARBAGE){
+            player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
+            player->flag_status=checkingMatches;
+        }
+        if(player->board[player->matchedQueueX[i]][player->matchedQueueY[i]+1]==COLOR_GARBAGE){
+            player->board[player->matchedQueueX[i]][player->matchedQueueY[i]+1]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
+            player->flag_status=checkingMatches;
+        }
+        if(player->board[player->matchedQueueX[i]-1][player->matchedQueueY[i]]==COLOR_GARBAGE){
+            player->board[player->matchedQueueX[i]-1][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
+            player->flag_status=checkingMatches;
+        }
+        if(player->board[player->matchedQueueX[i]][player->matchedQueueY[i]-1]==COLOR_GARBAGE){
+            player->board[player->matchedQueueX[i]][player->matchedQueueY[i]-1]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
+            player->flag_status=checkingMatches;
+        }
+
+        player->board[player->matchedQueueX[i]][player->matchedQueueY[i]]=0;
+    }
+
+    player->flag_redraw=true; //redrawing based on dimensions set in blinking - NOT reset here
+    player->flag_status=doingGravity;
+}
 
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, from top to bottom
 {
-    //KLog_U4("X:[",startX,"]  Y:[",startY,"]  EX:[",endX,"]  EY:[",endY);
-    KLog_U4("from X ",startX," to X ",endX,"    from Y ",startY," to Y ",endY);
+    KLog_U4("printBoard: from X ",startX," to X ",endX,"    from Y ",startY," to Y ",endY);
 
-    if(startY<1)//if(startY<2)
-    {
-        startY=1;//startY=2
-        KLog("%%@@@we NEWreset startY in printboard!!!!!!!");
-    }
+    if(startX==0)startX=1;
+    if(startY==0)startY=1;
 
     for(u8 xDraw=startX;xDraw<endX;xDraw++)
     {
         for(u8 yDraw=startY;yDraw<endY;yDraw++)
-        {
-           drawFullTile(player, xDraw,yDraw);
-        }
+            {
+                drawFullTile(player, xDraw,yDraw);
+                //if(player->board[xDraw][yDraw]==0)drawFullTile(player, xDraw,yDraw);
+            }
     }
 
     u8 p2offsetX=0;
-    if(player==&P2)p2offsetX=player2offset;
+    if(player==&P2)p2offsetX=PLAYER2OFFSET;
 
     s8 drawPosX,drawPosY;
     u8 i;
@@ -493,20 +477,27 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
         }
     }
 
-//leftright 
+//leftright
+
+u8 leftrightXstart;
+if((startX & 1) != 0)leftrightXstart=startX;
+else leftrightXstart=startX-1;
+
     for (u8 leftrightY=startY;leftrightY<endY;leftrightY++)
     {
-        for (u8 leftrightX=1;leftrightX<maxX;leftrightX+=2)//leftrightX<endX+endXadder u8 leftrightX=startX-xOddAdder;
+        //for (u8 leftrightX=1;leftrightX<maxX;leftrightX+=2)//leftrightX<endX+endXadder u8 leftrightX=startX-xOddAdder;
+        for (u8 leftrightX=leftrightXstart;leftrightX<maxX;leftrightX+=2)
         {
             if(player->board[leftrightX][leftrightY]!=0 || player->board[leftrightX+1][leftrightY]!=0)
             {
+                //KLog_U2("leftright at X: ",leftrightX," , Y: ",leftrightY);
+
                 i=0;
 
                 player->leftright[i][leftrightY]=(player->board[leftrightX][leftrightY]<<4)+player->board[leftrightX+1][leftrightY];
                 //now we have the color of the left cell in the left half of this byte and the right color in the right half of this byte
 
-                //sprintf(debug_string,"LR:%d", P1.leftright[i][leftrightY]);
-                //VDP_drawText(debug_string,34,1+xDrawAdd);
+                //KLog_U1("LR:",P1.leftright[i][leftrightY]);
 
                 drawPosX=xOffset+leftrightX+((leftrightX)>>1)+1+p2offsetX;
                 drawPosY=yOffset+leftrightY+((leftrightY-1)>>1);
@@ -777,17 +768,17 @@ void drawFullTile(Player* player, u8 xPos, u8 yPos)//TILE_ATTR_FULL(pal, prio, f
     bool flag_erase=false;
 
     //if we are drawing a tile other than color 1, we need to increase the tile index    
-    if(player->board[xPos][yPos]>1)colorAdd=(player->board[xPos][yPos]-1)<<2;//multiply by 4
-    else if(player->board[xPos][yPos]==0)flag_erase=true;
+    if(player->board[xPos][yPos]==0)flag_erase=true;
+    else if(player->board[xPos][yPos]>1)colorAdd=(player->board[xPos][yPos]-1)<<2;//multiply by 4
 
-    u8 p2offsetX=0;
-    if(player==&P2)p2offsetX=player2offset;
-
-    u8 drawingxPos=xPos+(xPos>>1)+p2offsetX;
+    u8 drawingxPos;
+    if(player==&P1)drawingxPos=xPos+(xPos>>1);
+    else if(player==&P2)drawingxPos=xPos+(xPos>>1)+PLAYER2OFFSET;
     u8 drawingyPos=yPos+(yPos>>1);
 
-    if(!(flag_erase))
+    if(flag_erase==false)
     {
+        //KLog_U2("drawFullTile: drew at X: ",xPos," Y: ",yPos);
         if((yPos & 1) != 0)
         {
             if((xPos & 1) != 0){//odd column, odd row (1,1)
@@ -843,9 +834,9 @@ void drawFullTile(Player* player, u8 xPos, u8 yPos)//TILE_ATTR_FULL(pal, prio, f
             }
         }
     }
-    else if(flag_erase)
+    else if(flag_erase==true)
     {
-        KLog_U2("erased at X: ",xPos," Y: ",yPos);
+        //KLog_U2("drawFullTile: erased at X: ",xPos," Y: ",yPos);
         if((yPos & 1) != 0)
         {
             if((xPos & 1) != 0){//odd column, odd row (1,1)
@@ -880,5 +871,98 @@ void drawFullTile(Player* player, u8 xPos, u8 yPos)//TILE_ATTR_FULL(pal, prio, f
                 return;
             }
         }        
+    }
+}
+
+u8 AIdirection=0;//left or right
+
+void processAI()
+{
+    //do calculation to determine which stack is lowest, stop moving left if stack is higher at adjacent
+    
+    //if(P2.flag_status!=fallingPiece)AIdirection=randomRange(0,1);
+    if(P2.flag_status==fallingPiece)
+    {
+        if(AIdirection==0)AIdirection=randomRange(1,2);
+//lateral movement
+        if(AIdirection==1)
+        {
+            if(P2.AIspawnCalc==true)
+            {
+                u8 j;
+                for(u8 i=xSpawn;i>0;i--)
+                {
+                    for(j=1;j<maxY;j++)
+                    {
+                        if(P2.board[i][j]!=0)
+                        {
+                            P2.AIcolumnview[i]=j;
+                            KLog_U2("[AI] column ",i," set as height ",j);
+                            break;
+                        }
+                    }
+                }
+                P2.AIspawnCalc=false;
+            }
+
+            //simulate inputs
+            if(collisionTest(&P2, LEFT)==FALSE && (P2.AIcolumnview[P2.xPosition-1]>=P2.AIcolumnview[P2.xPosition]))
+            {
+                KLog_U4("[AI] moving from Column:",P2.xPosition," with ",P2.AIcolumnview[P2.xPosition]," to Column:",P2.xPosition-1," with ",P2.AIcolumnview[P2.xPosition-1]);
+                P2.xPosition--;
+                P2.moveDelay=MOVE_DELAY_AMOUNT;
+                P2.spriteX-=TILESIZE;
+            }                
+        }
+        else if(AIdirection==2)
+        {
+            if(P2.AIspawnCalc==true)
+            {
+                u8 j;
+                for(u8 i=xSpawn;i<maxX+1;i++)
+                {
+                    for(j=1;j<maxY;j++)
+                    {
+                        if(P2.board[i][j]!=0)
+                        {
+                            P2.AIcolumnview[i]=j;
+                            KLog_U2("[AI] column ",i," set as height ",j);
+                            break;
+                        }
+                    }
+                }
+                P2.AIspawnCalc=false;
+            }
+
+            if(collisionTest(&P2, RIGHT)==FALSE && (P2.AIcolumnview[P2.xPosition+1]>=P2.AIcolumnview[P2.xPosition]))
+            {
+                P2.xPosition++;
+                P2.moveDelay=MOVE_DELAY_AMOUNT;
+                P2.spriteX+=TILESIZE;
+            }
+        }
+
+//cycling
+        if(P2.cycleDelay==0 && P2.has_released_cycle==true)
+        {
+            if(P1.has_released_cycle==false || P1.moveDelay==MOVE_DELAY_AMOUNT || P1.flag_status==spawningPiece)
+            {
+                doCycle(&P2, DOWN);
+                P2.cycleDelay=CYCLE_DELAY_AMOUNT;
+                P2.has_released_cycle=false;
+            }
+            if(P2.yPosition==4 || P2.yPosition==10)
+            {
+                doCycle(&P2, UP);
+                P2.cycleDelay=CYCLE_DELAY_AMOUNT;
+                P2.has_released_cycle=false;               
+            }
+        }
+    }
+
+    if(P2.flag_status==checkingMatches)
+    {
+        P2.AIspawnCalc=true;
+        AIdirection=0;
     }
 }
