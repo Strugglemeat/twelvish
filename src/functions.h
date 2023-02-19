@@ -61,12 +61,13 @@ typedef struct {
     u8 optionDropStyle;
     u8 optionNumColors;
     u8 optionStartButton;
+    u8 optionNumConnections;
 
 //timers
     u8 blinkTimerNum;
     u8 fallLockingTimerNum;
 
-//HOLD / swap
+//HOLD & SWAP
     u8 holdingPiece[fallingPieceNumberOfTiles];//for the start button HOLD function
     bool flag_currently_hold_swapping;
     bool flag_allowed_to_swap;
@@ -102,6 +103,7 @@ void setSharedNext();
 void drawSharedNext();
 void drawPlayerNext(Player* player);
 void createPiece(Player* player);
+void manageDrawing(Player* player);
 
 void effectFastDrop(Player* player);
 void manageFalling(Player* player);
@@ -388,6 +390,9 @@ void initialize()
 
     P1.flag_allowed_to_swap=true;
     P2.flag_allowed_to_swap=true;
+
+    //P1.optionNumConnections=2;
+    P2.optionNumConnections=3;
 }
 
 void drawFallingSprite(Player* player)
@@ -567,9 +572,15 @@ void checkMatches(Player* player)
     
     bool matchedAlready[9][18]={false};
 
-    for (u8 checkX=1;checkX<maxX+1;checkX++)//OPTIMIZE
+    u8 checkDrawEndY=player->drawEndY+player->optionNumConnections-1;
+    s8 checkDrawStartY=player->drawStartY-player->optionNumConnections-1;
+    if(checkDrawEndY>maxY+1)checkDrawEndY=maxY+1;
+    if(checkDrawStartY<0)checkDrawStartY=0;
+
+    for (u8 checkX=1;checkX<maxX+1;checkX++)
     {
-        for (u8 checkY=maxY+1;checkY>0;checkY--)//OPTIMIZE
+        //for (u8 checkY=maxY+1;checkY>0;checkY--)//OPTIMIZE
+        for (u8 checkY=checkDrawEndY;checkY>checkDrawStartY;checkY--)//turn this into a switch case then LUT
         {
             if(player->board[checkX][checkY]!=COLOR_BLANK && player->board[checkX][checkY]!=COLOR_GARBAGE)
             {
@@ -585,7 +596,7 @@ void checkMatches(Player* player)
                         else if(player->board[advance][checkY]!=connectionColor)break;
                     }
 
-                    if(connectionAmount>=3)
+                    if(connectionAmount>=player->optionNumConnections)
                     {//KLog("***match - hori");
                         for (u8 xAddDestructionQueue=0;xAddDestructionQueue<connectionAmount;xAddDestructionQueue++)
                         {
@@ -616,7 +627,7 @@ void checkMatches(Player* player)
                         else if(player->board[checkX][advance]!=connectionColor)break;
                     }
 
-                    if(connectionAmount>=3)
+                    if(connectionAmount>=player->optionNumConnections)
                     {//KLog("***match - vert");
                         for (u8 yAddDestructionQueue=0;yAddDestructionQueue<connectionAmount;yAddDestructionQueue++)
                         {
@@ -648,7 +659,7 @@ void checkMatches(Player* player)
                         incrementer++;
                     }
                     
-                    if(connectionAmount>=3)
+                    if(connectionAmount>=player->optionNumConnections)
                     {//KLog("***match - diagUp");
                         for (u8 i=0;i<connectionAmount;i++)
                         {
@@ -684,7 +695,7 @@ void checkMatches(Player* player)
                         incrementer++;
                     }
 
-                    if(connectionAmount>=3)
+                    if(connectionAmount>=player->optionNumConnections)
                     {//KLog("***match - diagDown");
                         for (u8 i=0;i<connectionAmount;i++)
                         {
@@ -986,7 +997,7 @@ void gameLogicSwitch(Player* player)
             break;
 
         case checkingMatches:
-            //KLog("$checkingMatches");
+            KLog("$checkingMatches");
             checkMatches(player);
             break;
 
@@ -1079,24 +1090,28 @@ void loadCharacters()
 void startupOptionsMenu()
 {
     #define optionsX 14
-    #define optionsBaseY 5
+    #define optionsBaseY 0
 
     s8 menuPosition=0;
     u16 optionsMenuButtons;
     bool releasedUpDownButton=true;
     bool releasedLeftRight=true;
 
-    P2.AIplayer=true;//turn this option on by default
-    P1.optionDropStyle=SONIC;
+    P2.AIplayer=true;//default
+    P1.optionDropStyle=SONIC;//default
     s8 dropSelection=1;
 
-    P1.optionStartButton=SKIP;
+    P1.optionStartButton=SKIP;//default
     s8 startSelection=1;
 
     bool selectedArrowsToggle=true;
     u8 selectedArrowsToggleCounter=0;
     P1.optionNumColors=5;//turn this option to 5 by default
 
+    P1.optionNumConnections=3;//default
+    s8 connectionsSelection=1;
+
+    #define numSelections 4
     #define counterMaxAmount 6
 
     while(1)
@@ -1118,8 +1133,8 @@ void startupOptionsMenu()
         if(!(optionsMenuButtons & BUTTON_DOWN) && !(optionsMenuButtons & BUTTON_UP))releasedUpDownButton=true;
         if(!(optionsMenuButtons & BUTTON_LEFT) && !(optionsMenuButtons & BUTTON_RIGHT))releasedLeftRight=true;
 
-        if(menuPosition>3)menuPosition=0;
-        if(menuPosition<0)menuPosition=3;
+        if(menuPosition>numSelections)menuPosition=0;
+        if(menuPosition<0)menuPosition=numSelections;
 
 //start button - exit to game
         if(optionsMenuButtons & BUTTON_START)
@@ -1181,6 +1196,19 @@ void startupOptionsMenu()
                 releasedLeftRight=false;
             }
         }
+        else if(menuPosition==4 && releasedLeftRight==true)
+        {
+            if(optionsMenuButtons & BUTTON_RIGHT)
+            {
+                connectionsSelection++;
+                releasedLeftRight=false;
+            }
+            if(optionsMenuButtons & BUTTON_LEFT)
+            {
+                connectionsSelection--;
+                releasedLeftRight=false;
+            }
+        }
 
         if(dropSelection>2)dropSelection=0;
         else if(dropSelection<0)dropSelection=2;
@@ -1188,17 +1216,20 @@ void startupOptionsMenu()
         if(startSelection>2)startSelection=0;
         else if(startSelection<0)startSelection=2;
 
+        if(connectionsSelection>2)connectionsSelection=0;
+        else if(connectionsSelection<0)connectionsSelection=2;
+
         SYS_doVBlankProcess();
 
 //general text stuff
         VDP_clearPlane(BG_A,TRUE);
 
         sprintf(debug_string,"Twelvish alpha");
-        VDP_drawText(debug_string,optionsX-1,optionsBaseY-2);
-        sprintf(debug_string,"options menu");
-        VDP_drawText(debug_string,optionsX-1,optionsBaseY);
-        sprintf(debug_string,"DPAD to change");
-        VDP_drawText(debug_string,optionsX-1,optionsBaseY+2);
+        VDP_drawText(debug_string,optionsX-1,optionsBaseY+1);
+        //sprintf(debug_string,"options menu");
+        //VDP_drawText(debug_string,optionsX-0,optionsBaseY-0);
+        //sprintf(debug_string,"DPAD to change");
+        //VDP_drawText(debug_string,optionsX-1,optionsBaseY+2);
 
 //DROPPING option
         if(menuPosition!=0)
@@ -1246,24 +1277,24 @@ void startupOptionsMenu()
 //CPU option
         if(menuPosition!=1)
         {
-            if(P2.AIplayer==true)sprintf(debug_string,"  CPU:[ON]");
-            else if(P2.AIplayer==false)sprintf(debug_string,"  CPU:[OFF]");
+            if(P2.AIplayer==true)sprintf(debug_string," CPU:[ON]");
+            else if(P2.AIplayer==false)sprintf(debug_string," CPU:[OFF]");
         }
         else if(menuPosition==1)
         {
             if(selectedArrowsToggleCounter==true)
             {
-                if(P2.AIplayer==true)sprintf(debug_string,"> CPU:[ON]");
-                else if(P2.AIplayer==false)sprintf(debug_string,"> CPU:[OFF]");
+                if(P2.AIplayer==true)sprintf(debug_string,">CPU:[ON]");
+                else if(P2.AIplayer==false)sprintf(debug_string,">CPU:[OFF]");
             }
             else
             {
-                if(P2.AIplayer==true)sprintf(debug_string,"  CPU:[ON]");
-                else if(P2.AIplayer==false)sprintf(debug_string,"  CPU:[OFF]");
+                if(P2.AIplayer==true)sprintf(debug_string," CPU:[ON]");
+                else if(P2.AIplayer==false)sprintf(debug_string," CPU:[OFF]");
             }
         }
 
-        VDP_drawText(debug_string,optionsX,optionsBaseY+8);
+        VDP_drawText(debug_string,optionsX+1,optionsBaseY+8);
 
 //COLORS option
         if(menuPosition!=2)
@@ -1329,10 +1360,51 @@ void startupOptionsMenu()
     VDP_drawText(debug_string,optionsX-1,optionsBaseY+12);
     P1.optionStartButton=startSelection;
 
+//CONNECTIONS option
+        if(menuPosition!=4)
+        {
+            switch(connectionsSelection)
+            {
+                case 0:
+                sprintf(debug_string," MATCH:[2]");
+                break;
+
+                case 1:
+                sprintf(debug_string," MATCH:[3]");
+                break;
+
+                case 2:
+                sprintf(debug_string," MATCH:[4]");
+                break;             
+            }
+        }
+        else if(menuPosition==4)
+        {
+            switch(connectionsSelection)
+            {
+                case 0:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">MATCH:[2]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," MATCH:[2]");
+                break;
+
+                case 1:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">MATCH:[3]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," MATCH:[3]");
+                break;
+
+                case 2:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">MATCH:[4]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," MATCH:[4]");
+                break;   
+            }  
+        }
+
+    VDP_drawText(debug_string,optionsX-1,optionsBaseY+14);
+    P1.optionNumConnections=connectionsSelection+2;
 
 //tell them to press start to leave
         sprintf(debug_string,"PRESS START");
-        VDP_drawText(debug_string,optionsX,optionsBaseY+16);  
+        VDP_drawText(debug_string,optionsX+0,optionsBaseY+23);  
     }
 }
 
@@ -1341,7 +1413,7 @@ void drawCombosAndChains(Player* player)
     u8 xPosShiftP2=0;
     if(player==&P2)xPosShiftP2=PLAYER2OFFSET;
 
-    if(player->howManyMatched>3)
+    if(player->howManyMatched>player->optionNumConnections)
     {
         sprintf(debug_string,"COMBO:%d",player->howManyMatched);
         VDP_drawText(debug_string,2+xPosShiftP2,1);
@@ -1524,4 +1596,210 @@ u16 innerConnectorLUT(u16 section)
     section=lookup[section];
 
     return section;
+}
+
+void blinkMatches(Player* player)
+{
+    #define blinkingTimeAmt 6000
+    #define blinkNumOfTimes 8
+
+    //KLog("$^^blinkMatches!!!");
+    if(player->blinkTimes==0)//initialization
+    {
+        KLog("^^blinkmatches set draw parameters to FULL BOARD");
+        player->drawStartX=maxX;
+        player->drawEndX=1;
+        player->drawStartY=maxY;
+        player->drawEndY=1;
+
+//start the timer
+        getTimer(player->blinkTimerNum,true);
+
+        for(u8 i=0;i<player->howManyMatched;i++)//don't iterate through the entire board, only the destruction queue pieces
+        {
+//update the drawing boundaries
+            if(player->matchedQueueX[i]<player->drawStartX)
+                {
+                    player->drawStartX=player->matchedQueueX[i];
+                    KLog_U1("^^drawStartX updated to: ",player->drawStartX);
+                }
+            if(player->matchedQueueX[i]>player->drawEndX)
+                {
+                    player->drawEndX=player->matchedQueueX[i];
+                    KLog_U1("^^drawEndX updated to: ",player->drawEndX);
+                }
+            if(player->matchedQueueY[i]<player->drawStartY)
+                {
+                    player->drawStartY=player->matchedQueueY[i];
+                    KLog_U1("^^drawStartY updated to: ",player->drawStartY);
+                }
+            if(player->matchedQueueY[i]>player->drawEndY)
+                {
+                    player->drawEndY=player->matchedQueueY[i];
+                    KLog_U1("^^drawEndY updated to: ",player->drawEndY);
+                }
+            
+//save the cleared pieces to blinkingSave array
+                player->blinkingSave[player->matchedQueueX[i]][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
+        }
+    
+        player->drawStartX--;KLog_U2("manual update of drawStartX from ",player->drawStartX+1," to ",player->drawStartX);
+        player->drawEndX++;KLog_U2("manual update of drawEndX from ",player->drawEndX-1," to ",player->drawEndX);
+        player->drawStartY--;KLog_U2("manual update of drawStartY from ",player->drawStartY+1," to ",player->drawStartY);
+        player->drawEndY++;KLog_U2("manual update of drawEndY from ",player->drawEndY-1," to ",player->drawEndY);
+        
+        player->blinkTimes++;
+    }
+
+    if(getTimer(player->blinkTimerNum,false)>=blinkingTimeAmt && player->blinkTimes<blinkNumOfTimes)
+    {
+        player->blinkTimes++;//increment the blinking number
+        getTimer(player->blinkTimerNum,true);//reset the timer
+
+        if((player->blinkTimes & 1) == 0)//if blinktimes is even
+        {
+            for(u8 i=0;i<player->howManyMatched;i++)
+            {
+                player->board[player->matchedQueueX[i]][player->matchedQueueY[i]]=player->blinkingSave[player->matchedQueueX[i]][player->matchedQueueY[i]];
+            }
+        }
+        else if((player->blinkTimes & 1) != 0)//if blinktimes is odd
+        {
+            for(u8 i=0;i<player->howManyMatched;i++)
+            {
+                player->board[player->matchedQueueX[i]][player->matchedQueueY[i]]=0;
+            }    
+        }
+
+        KLog_U4("^^blink drawing ",player->drawStartX,",",player->drawEndX," | ",player->drawStartY,",",player->drawEndY);
+        player->flag_redraw=true;
+        return;
+    }
+    else if(player->blinkTimes>=blinkNumOfTimes)
+        {
+//restore the pieces so they can be properly destroyed
+            for(u8 i=0;i<player->howManyMatched;i++)
+            {
+                player->board[player->matchedQueueX[i]][player->matchedQueueY[i]]=player->blinkingSave[player->matchedQueueX[i]][player->matchedQueueY[i]];
+//reset blinkingSave array (necessary?)
+                player->blinkingSave[player->matchedQueueX[i]][player->matchedQueueY[i]]=0;
+            }
+
+            player->flag_redraw=true;
+
+            player->flag_status=destroyingMatches;
+            player->blinkTimes=0;
+        }
+}
+
+void processDestroy(Player* player)//we ONLY get here if we are destroying tiles
+{
+    KLog("processDestroy just started");
+    player->chainAmount++;
+
+    for (u8 i=0;i<player->howManyMatched;i++)
+    {
+//check the surrounding for garbage to be transformed
+        if(player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]==COLOR_GARBAGE){
+            player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
+            player->flag_status=checkingMatches;
+        }
+        if(player->board[player->matchedQueueX[i]][player->matchedQueueY[i]+1]==COLOR_GARBAGE){
+            player->board[player->matchedQueueX[i]][player->matchedQueueY[i]+1]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
+            player->flag_status=checkingMatches;
+        }
+        if(player->board[player->matchedQueueX[i]-1][player->matchedQueueY[i]]==COLOR_GARBAGE){
+            player->board[player->matchedQueueX[i]-1][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
+            player->flag_status=checkingMatches;
+        }
+        if(player->board[player->matchedQueueX[i]][player->matchedQueueY[i]-1]==COLOR_GARBAGE){
+            player->board[player->matchedQueueX[i]][player->matchedQueueY[i]-1]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
+            player->flag_status=checkingMatches;
+        }
+
+        player->board[player->matchedQueueX[i]][player->matchedQueueY[i]]=0;
+    }
+
+    player->flag_redraw=true; //redrawing based on dimensions set in blinking - NOT reset here
+    player->flag_status=doingGravity;
+}
+
+void drawFullTile(Player* player, u8 xPos, u8 yPos)
+{
+    u8 colorAdd=0;//4 tiles for each color. so color 2 is adding 4, color 3 is adding 8
+    bool flag_erase=false;
+
+    //if we are drawing a tile other than color 1, we need to increase the tile index    
+    if(player->board[xPos][yPos]==0)flag_erase=true;
+    else if(player->board[xPos][yPos]>1)colorAdd=(player->board[xPos][yPos]-1)<<2;//multiply by 4
+
+    u8 drawingxPos=xPos+(xPos>>1);
+    if(player==&P2)drawingxPos+=PLAYER2OFFSET;
+    u8 drawingyPos=yPos+(yPos>>1);
+
+    if(flag_erase==false)
+    {
+        //KLog_U2("drawFullTile: drew at X: ",xPos," Y: ",yPos);
+        if((yPos & 1) != 0)
+        {
+            if((xPos & 1) != 0){//odd column, odd row (1,1)
+                //bottom left: full square
+                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
+                //bottom right: left half NEEDED FOR WALL
+                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, TRUE, 3+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);
+                return;
+            }
+            else if((xPos & 1) == 0){//even column, odd row (2,1)
+                //bottom right: full square
+                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
+                return;
+            }
+        }
+        else if((yPos & 1) == 0)
+        {
+            if((xPos & 1) != 0){//odd column, even row (1,2)
+                //top left: full square
+                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
+                //top right: left half NEEDED FOR WALL
+                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, TRUE, 3+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);
+                return;
+            }
+            else if((xPos & 1) == 0){//even column, even row (2,2)
+                //top right: full square
+                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
+                return;
+            }
+        }
+    }
+    else if(flag_erase==true)
+    {
+        //KLog_U2("drawFullTile: erased at X: ",xPos," Y: ",yPos);
+        if((yPos & 1) != 0)
+        {
+            if((xPos & 1) != 0){//odd column, odd row (1,1)
+                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);//top left: bottom half NEEDED
+                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);//top right: bottom left corner NEEDED
+                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);//bottom left: full square NEEDED
+                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);//bottom right: left half NEEDED
+                return;
+            }
+            else if((xPos & 1) == 0){//even column, odd row (2,1)
+                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);//top right: bottom half NEEDED
+                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);//bottom right: full square NEEDED
+                return;
+            }
+        }
+        else if((yPos & 1) == 0)
+        {
+            if((xPos & 1) != 0){//odd column, even row (1,2)
+                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);//top left: full square
+                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);//top right: left half
+                return;
+            }
+            else if((xPos & 1) == 0){//even column, even row (2,2)
+                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);//top right: full square
+                return;
+            }
+        }        
+    }
 }

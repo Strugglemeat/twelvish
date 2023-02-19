@@ -3,11 +3,6 @@
 #include <functions.h>
 #include <kdebug.h>
 
-//PAL0
-//PAL1
-//PAL2
-//PAL3 - transparent (1), pieces (6), 9 free
-
 int main()
 {
     VDP_clearPlane(BG_B,TRUE);
@@ -24,8 +19,7 @@ int main()
 
     setRandomSeed(GET_HVCOUNTER*GET_VCOUNTER*GET_HCOUNTER);
 
-    VDP_drawImageEx(BG_B,&gridbg,TILE_ATTR_FULL(PAL0, TRUE, FALSE, FALSE, 0x58d),0,0,TRUE,TRUE);
-    //VDP_drawImageEx(BG_B,&gridbg,0x58d,0,0,TRUE,TRUE);
+    VDP_drawImageEx(BG_B,&gridbg,TILE_ATTR_FULL(PAL0, TRUE, FALSE, FALSE, 0x58B),0,0,TRUE,TRUE);//0x58d
     PAL_setPalette(PAL0,cloud.palette->data,DMA);
     PAL_setColor(0,RGB8_8_8_TO_VDPCOLOR(255,255,255));
 
@@ -63,26 +57,10 @@ int main()
 
         SYS_doVBlankProcess();
 
-        drawCombosAndChains(&P1);//this needs to be restricted
-        drawCombosAndChains(&P2);//this needs to be restricted
+        manageDrawing(&P1);
+        manageDrawing(&P2);
 
-        if(P1.flag_status==fallingPiece)drawFallingSprite(&P1);//only draw if we're falling
-        if(P2.flag_status==fallingPiece)drawFallingSprite(&P2);//only draw if we're falling
-        
-        if(P1.flag_drawNext==true){drawPlayerNext(&P1);P1.flag_drawNext=false;}
-        if(P2.flag_drawNext==true){drawPlayerNext(&P2);P2.flag_drawNext=false;}
         if(flag_sharedNextStatus==true)drawSharedNext();
-
-        if(P1.flag_redraw==true){
-            //printBoard(&P1, 1,1,maxX+1,maxY+2);
-            printBoard(&P1, P1.drawStartX,P1.drawStartY,P1.drawEndX,P1.drawEndY);
-            P1.flag_redraw=false;
-        }
-
-        if(P2.flag_redraw==true){
-            printBoard(&P2, P2.drawStartX,P2.drawStartY,P2.drawEndX,P2.drawEndY);
-            P2.flag_redraw=false;
-        }
 
         if(globalSpawnCloudVisibilityTimer>20)SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
 
@@ -104,132 +82,6 @@ int main()
     return 0;
 }
 
-void blinkMatches(Player* player)
-{
-    #define blinkingTimeAmt 6000
-    #define blinkNumOfTimes 8
-
-    //KLog("$^^blinkMatches!!!");
-    if(player->blinkTimes==0)//initialization
-    {
-        KLog("^^blinkmatches set draw parameters to FULL BOARD");
-        player->drawStartX=maxX;
-        player->drawEndX=1;
-        player->drawStartY=maxY;
-        player->drawEndY=1;
-
-//start the timer
-        getTimer(player->blinkTimerNum,true);
-
-        for(u8 i=0;i<player->howManyMatched;i++)//don't iterate through the entire board, only the destruction queue pieces
-        {
-//update the drawing boundaries
-            if(player->matchedQueueX[i]<player->drawStartX)
-                {
-                    player->drawStartX=player->matchedQueueX[i];
-                    KLog_U1("^^drawStartX updated to: ",player->drawStartX);
-                }
-            if(player->matchedQueueX[i]>player->drawEndX)
-                {
-                    player->drawEndX=player->matchedQueueX[i];
-                    KLog_U1("^^drawEndX updated to: ",player->drawEndX);
-                }
-            if(player->matchedQueueY[i]<player->drawStartY)
-                {
-                    player->drawStartY=player->matchedQueueY[i];
-                    KLog_U1("^^drawStartY updated to: ",player->drawStartY);
-                }
-            if(player->matchedQueueY[i]>player->drawEndY)
-                {
-                    player->drawEndY=player->matchedQueueY[i];
-                    KLog_U1("^^drawEndY updated to: ",player->drawEndY);
-                }
-            
-//save the cleared pieces to blinkingSave array
-                player->blinkingSave[player->matchedQueueX[i]][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
-        }
-    
-        player->drawStartX--;KLog_U2("manual update of drawStartX from ",player->drawStartX+1," to ",player->drawStartX);
-        player->drawEndX++;KLog_U2("manual update of drawEndX from ",player->drawEndX-1," to ",player->drawEndX);
-        player->drawStartY--;KLog_U2("manual update of drawStartY from ",player->drawStartY+1," to ",player->drawStartY);
-        player->drawEndY++;KLog_U2("manual update of drawEndY from ",player->drawEndY-1," to ",player->drawEndY);
-        
-        player->blinkTimes++;
-    }
-
-    if(getTimer(player->blinkTimerNum,false)>=blinkingTimeAmt && player->blinkTimes<blinkNumOfTimes)
-    {
-        player->blinkTimes++;//increment the blinking number
-        getTimer(player->blinkTimerNum,true);//reset the timer
-
-        if((player->blinkTimes & 1) == 0)//if blinktimes is even
-        {
-            for(u8 i=0;i<player->howManyMatched;i++)
-            {
-                player->board[player->matchedQueueX[i]][player->matchedQueueY[i]]=player->blinkingSave[player->matchedQueueX[i]][player->matchedQueueY[i]];
-            }
-        }
-        else if((player->blinkTimes & 1) != 0)//if blinktimes is odd
-        {
-            for(u8 i=0;i<player->howManyMatched;i++)
-            {
-                player->board[player->matchedQueueX[i]][player->matchedQueueY[i]]=0;
-            }    
-        }
-
-        KLog_U4("^^blink drawing ",player->drawStartX,",",player->drawEndX," | ",player->drawStartY,",",player->drawEndY);
-        player->flag_redraw=true;
-        return;
-    }
-    else if(player->blinkTimes>=blinkNumOfTimes)
-        {
-//restore the pieces so they can be properly destroyed
-            for(u8 i=0;i<player->howManyMatched;i++)
-            {
-                player->board[player->matchedQueueX[i]][player->matchedQueueY[i]]=player->blinkingSave[player->matchedQueueX[i]][player->matchedQueueY[i]];
-//reset blinkingSave array (necessary?)
-                player->blinkingSave[player->matchedQueueX[i]][player->matchedQueueY[i]]=0;
-            }
-
-            player->flag_redraw=true;
-
-            player->flag_status=destroyingMatches;
-            player->blinkTimes=0;
-        }
-}
-
-void processDestroy(Player* player)//we ONLY get here if we are destroying tiles
-{
-    KLog("processDestroy just started");
-    player->chainAmount++;
-
-    for (u8 i=0;i<player->howManyMatched;i++)
-    {
-//check the surrounding for garbage to be transformed
-        if(player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]==COLOR_GARBAGE){
-            player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
-            player->flag_status=checkingMatches;
-        }
-        if(player->board[player->matchedQueueX[i]][player->matchedQueueY[i]+1]==COLOR_GARBAGE){
-            player->board[player->matchedQueueX[i]][player->matchedQueueY[i]+1]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
-            player->flag_status=checkingMatches;
-        }
-        if(player->board[player->matchedQueueX[i]-1][player->matchedQueueY[i]]==COLOR_GARBAGE){
-            player->board[player->matchedQueueX[i]-1][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
-            player->flag_status=checkingMatches;
-        }
-        if(player->board[player->matchedQueueX[i]][player->matchedQueueY[i]-1]==COLOR_GARBAGE){
-            player->board[player->matchedQueueX[i]][player->matchedQueueY[i]-1]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
-            player->flag_status=checkingMatches;
-        }
-
-        player->board[player->matchedQueueX[i]][player->matchedQueueY[i]]=0;
-    }
-
-    player->flag_redraw=true; //redrawing based on dimensions set in blinking - NOT reset here
-    player->flag_status=doingGravity;
-}
-
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, from top to bottom
 {
     KLog_U4("printBoard: from X ",startX," to X ",endX,"    from Y ",startY," to Y ",endY);
@@ -237,13 +89,13 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     if(startX==0)
     {
        startX=1;
-       KLog("printBoard: fixed StartX at zero");//OPTIMIZE - at source, don't allow 0
+       KLog("printBoard: fixed StartX at zero");//OPTIMIZE - at source, don't permit 0
     }
         
     if(startY==0)
     {
         startY=1;
-        KLog("printBoard: fixed StartY at zero");//OPTIMIZE - at source, don't allow 0
+        KLog("printBoard: fixed StartY at zero");//OPTIMIZE - at source, don't permit 0
     }
 
     for(u8 xDraw=startX;xDraw<endX;xDraw++)
@@ -260,9 +112,9 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     s8 drawPosX,drawPosY;
 
 //updown
-u8 updownYstart;
-if((startY &1) == 0)updownYstart=startY;
-else updownYstart=startY-1;
+    u8 updownYstart;
+    if((startY &1) == 0)updownYstart=startY;
+    else updownYstart=startY-1;
 
     for (u8 updownX=startX;updownX<endX;updownX++)
     {
@@ -283,9 +135,9 @@ else updownYstart=startY-1;
     }
 
 //leftright
-u8 leftrightXstart;
-if((startX & 1) != 0)leftrightXstart=startX;
-else leftrightXstart=startX-1;
+    u8 leftrightXstart;
+    if((startX & 1) != 0)leftrightXstart=startX;
+    else leftrightXstart=startX-1;
 
     for (u8 leftrightY=startY;leftrightY<endY;leftrightY++)
     {
@@ -294,12 +146,9 @@ else leftrightXstart=startX-1;
             if(player->board[leftrightX][leftrightY]!=0 || player->board[leftrightX+1][leftrightY]!=0)
             {
                 //KLog_U2("leftright at X: ",leftrightX," , Y: ",leftrightY);
-
-                player->leftright[leftrightY]=(player->board[leftrightX][leftrightY]<<4)+player->board[leftrightX+1][leftrightY];
-                //now we have the color of the left cell in the left half of this byte and the right color in the right half of this byte
-
+                player->leftright[leftrightY]=(player->board[leftrightX][leftrightY]<<4)+player->board[leftrightX+1][leftrightY];//now we have the color of the left cell in the left half of this byte and the right color in the right half of this byte
+                
                 //KLog_U1("LR:",P1.leftright[leftrightY]);
-
                 drawPosX=xOffset+leftrightX+((leftrightX)>>1)+1+p2offsetX;
                 drawPosY=yOffset+leftrightY+((leftrightY-1)>>1);
 
@@ -309,8 +158,8 @@ else leftrightXstart=startX-1;
     }
 
 //dynamic inner section vram load + draw
-//28 4-way tiles per side (56 total)
-//currently we are calculating and drawing all 28 every time each person draws anywhere on the field
+//32 4-way tiles per side (64 total)
+//currently we are calculating and drawing all 32 every time each person draws anywhere on the field
 
     u32 tile[8];
 
@@ -320,11 +169,25 @@ else leftrightXstart=startX-1;
     u8 vramOffsetP2=0;
     if(player==&P2)vramOffsetP2=32;
 
-    for(u8 innerConnectorRow=1;innerConnectorRow<maxX+1;innerConnectorRow+=2)//OPTIMIZE - RESTRICT START AND END
-    //for(u8 innerConnectorRow=startX;innerConnectorRow<endX;innerConnectorRow+=2)
+    s8 innerDrawingLowestY=startY;
+    if((innerDrawingLowestY & 1) == 0)innerDrawingLowestY--;
+    else innerDrawingLowestY-=2;
+    if(innerDrawingLowestY<3)innerDrawingLowestY=3;
+
+/*
+//maxY is 17
+    u8 innerDrawingHighestY=endY;
+    if((innerDrawingHighestY & 1) == 0)innerDrawingHighestY++;
+    else innerDrawingHighestY+=2;
+    if(innerDrawingHighestY>maxY)innerDrawingHighestY=maxY;
+    //we need to add to tileIncrementer here
+    tileIncrementer+=maxY-endY;//innerDrawingHighestY;
+
+    for(u8 innerConnectorColumn=innerDrawingHighestY;innerConnectorColumn>innerDrawingLowestY;innerConnectorColumn-=2)
+*/
+    for(u8 innerConnectorColumn=maxY;innerConnectorColumn>innerDrawingLowestY;innerConnectorColumn-=2)
     {
-        for(u8 innerConnectorColumn=3;innerConnectorColumn<maxY+1;innerConnectorColumn+=2)//OPTIMIZE - RESTRICT START AND END
-        //for(u8 innerConnectorColumn=startY;innerConnectorColumn<endY;innerConnectorColumn+=2)
+        for(u8 innerConnectorRow=1;innerConnectorRow<maxX+1;innerConnectorRow+=2)
         {
             if(player->board[innerConnectorRow][innerConnectorColumn]!=0 || player->board[innerConnectorRow+1][innerConnectorColumn]!=0)
             {
@@ -345,84 +208,22 @@ else leftrightXstart=startX-1;
             tileIncrementer++;
         }
     }
+    KLog_U1("tileIncrementer ended at ",tileIncrementer);//this is ending at 32 - shouldn't it be only 28?
 }
 
-void drawFullTile(Player* player, u8 xPos, u8 yPos)
+void manageDrawing(Player* player)
 {
-    u8 colorAdd=0;//4 tiles for each color. so color 2 is adding 4, color 3 is adding 8
-    bool flag_erase=false;
+    drawCombosAndChains(player);//this needs to be restricted
 
-    //if we are drawing a tile other than color 1, we need to increase the tile index    
-    if(player->board[xPos][yPos]==0)flag_erase=true;
-    else if(player->board[xPos][yPos]>1)colorAdd=(player->board[xPos][yPos]-1)<<2;//multiply by 4
+    if(player->flag_status==fallingPiece)drawFallingSprite(player);//only draw if we're falling
 
-    u8 drawingxPos=xPos+(xPos>>1);
-    if(player==&P2)drawingxPos+=PLAYER2OFFSET;
-    u8 drawingyPos=yPos+(yPos>>1);
-
-    if(flag_erase==false)
-    {
-        //KLog_U2("drawFullTile: drew at X: ",xPos," Y: ",yPos);
-        if((yPos & 1) != 0)
-        {
-            if((xPos & 1) != 0){//odd column, odd row (1,1)
-                //bottom left: full square
-                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
-                //bottom right: left half NEEDED FOR WALL
-                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, TRUE, 3+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);
-                return;
-            }
-            else if((xPos & 1) == 0){//even column, odd row (2,1)
-                //bottom right: full square
-                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);
-                return;
-            }
-        }
-        else if((yPos & 1) == 0)
-        {
-            if((xPos & 1) != 0){//odd column, even row (1,2)
-                //top left: full square
-                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-                //top right: left half NEEDED FOR WALL
-                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, TRUE, 3+colorAdd), drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);
-                return;
-            }
-            else if((xPos & 1) == 0){//even column, even row (2,2)
-                //top right: full square
-                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);
-                return;
-            }
-        }
+    if(player->flag_redraw==true){
+        printBoard(player, player->drawStartX,player->drawStartY,player->drawEndX,player->drawEndY);//printBoard(&P1, 1,1,maxX+1,maxY+2);
+        player->flag_redraw=false;
     }
-    else if(flag_erase==true)
-    {
-        //KLog_U2("drawFullTile: erased at X: ",xPos," Y: ",yPos);
-        if((yPos & 1) != 0)
-        {
-            if((xPos & 1) != 0){//odd column, odd row (1,1)
-                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);//top left: bottom half NEEDED
-                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);//top right: bottom left corner NEEDED
-                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);//bottom left: full square NEEDED
-                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset+1, drawingyPos+yOffset, 1, 1);//bottom right: left half NEEDED
-                return;
-            }
-            else if((xPos & 1) == 0){//even column, odd row (2,1)
-                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);//top right: bottom half
-                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset, drawingyPos+yOffset, 1, 1);//bottom right: full square NEEDED
-                return;
-            }
-        }
-        else if((yPos & 1) == 0)
-        {
-            if((xPos & 1) != 0){//odd column, even row (1,2)
-                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);//top left: full square
-                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset+1, drawingyPos+yOffset-1, 1, 1);//top right: left half
-                return;
-            }
-            else if((xPos & 1) == 0){//even column, even row (2,2)
-                VDP_fillTileMapRect(BG_A, 0, drawingxPos+xOffset, drawingyPos+yOffset-1, 1, 1);//top right: full square
-                return;
-            }
-        }        
+
+    if(player->flag_drawNext==true){
+        drawPlayerNext(player);
+        player->flag_drawNext=false;
     }
 }
