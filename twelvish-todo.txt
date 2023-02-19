@@ -1,9 +1,13 @@
+option: fall pieces 2 instead of 3
+======
 do not draw all inner sections every time! optimize this
 *add limit to the furthest X (endX)
 *do an addition to tileIncrementer based on how much is gone
 for example if endX=8, tileIncremeter no additional add
 if endX=6,tileIncrementer +2 (AFTER EACH X LOOP) - to get it back to where it should be
 ========
+use a different 5 colors for each player
+======
 check for ALL CLEAR        P1.flag_allClear
 =========
 implement hori/vert rotation
@@ -38,6 +42,19 @@ fix the blinking in the field when clearing tiles
 start it with "ROUND 1 - FIGHT"
 *add win indicators to HUD
 *figure out how to properly center HUD (next preview piece might need to be made a sprite so it can be rendered off-center *OR* use two sections to render it)
-~~~~~~~~~~~
-trials mode ala starsweep
-https://www.youtube.com/watch?v=PI-s15dM8qM
+======
+controls
+for chrs without fastdrop, UP cycles spells
+for all, tap A to use direct damage, hold A to cast spell
+======
+SP modes
+*STORY: fight all the characters with story vignettes along the way (each character has their own AI)
+*ATTACK: starsweep style 60 second challenges
+*TRIALS: predefined targets in sequential order https://www.youtube.com/watch?v=PI-s15dM8qM
+*ENDLESS: practice/play solo with whatever settings you want
+
+MP modes
+*CLASSIC: each player picks their own character and spell(s) (cost restrictions on spells)
+*MIRROR: both players always get the same loadout. first round, 2p picks char+spell. after that, loser picks char+spell
+*FREE: prior to the match, players choose any attributes and 1 spell (no cost restrictions on spells)
+*PEACE: each player plays endless mode ala Pnickies

@@ -1,0 +1,57 @@
+now you can, at any time, spend your "points" on three different things:
+1) if an opponent is attacking you, you can use your points to offset theirs (ala puyo, spf2t) - garbage attacks don't fall until the attacked player has set their piece down
+2) you can send the equivalent garbage amount to the amount of points you have
+3) you can choose from a special attack which is inflicted on your opponent immediately (not delayed until they dropped their current piece)
+these special attacks are chosen at character select, and you cycle through them by pressing UP
+
+
+SWAP
+switch your opponent's next piece with yours
+~~~~~~~~~~~
+DESTROY
+destroy your opponent's current piece
+~~~~~~~~~~
+BLEAK
+make your opponent's next piece queue invisible for X turns
+~~~~~~~~~~
+LOCKED
+opponent can't rotate for X turns
+~~~~~~~~~
+MIXED
+reverse opponent inputs for X turns
+~~~~~
+TOWERS
+fill opponent's columns 1 and 7 with garbage
+~~~~~~
+SHIELD
+your opponent can't use spells on you for X turns
+~~~~~~~
+FROZEN
+your opponent can't make matches for X turns (low #)
+~~~~~~
+RISE
+raises the opponent's field by one
+~~~~~~
+DROPPY
+lowers your field by one
+
+
+
+
+
+
+
+TRAITS:
+*resurrection (only one time per match)
+*sonic drop
+*hard drop
+*only 4 colors (but nerf damage given)
+*extra spell slot
+*can't cycle, only rotate
+*can't rotate, only cycle
+*can't rotate or cycle
+*hold piece
+*skip piece
+*2 colors to match
+*4 colors to match
+*drops 2 pieces not 3
