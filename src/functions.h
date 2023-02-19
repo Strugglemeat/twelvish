@@ -58,12 +58,19 @@ typedef struct {
     u8 playerNum;//used only in debug
 
 //options
-    u8 optionsDropStyle;
-    u8 optionsNumColors;
+    u8 optionDropStyle;
+    u8 optionNumColors;
+    u8 optionStartButton;
 
 //timers
     u8 blinkTimerNum;
     u8 fallLockingTimerNum;
+
+//HOLD / swap
+    u8 holdingPiece[fallingPieceNumberOfTiles];//for the start button HOLD function
+    bool flag_currently_hold_swapping;
+    bool flag_allowed_to_swap;
+
 } Player;
 
 Player P1;
@@ -116,7 +123,7 @@ u16 leftrightLUT(u16 section);
 bool leftrightLUTflag(u16 section);
 
 u8 sharedNext[fallingPieceNumberOfTiles];
-u8 sharedNextStatus;
+bool flag_sharedNextStatus;
 char debug_string[40] = "";
 
 #define TILESIZE 12
@@ -183,9 +190,14 @@ enum colors{
 #define maxLaterals maxX-1 //how many times a player can fiddle with their sonic dropped piece
 
 enum optionsDropStyles{
-    OFF,
+    OFF=0,
     SONIC,
     HARD
+};
+
+enum optionsStartButton{
+    SKIP=1,
+    HOLD=2
 };
 
 void loadTiles()
@@ -237,9 +249,7 @@ void loadTiles()
 
     VDP_loadTileSet(leftright45.tileset,extra_tiles_start+12,DMA);
     VDP_loadTileSet(leftright46.tileset,extra_tiles_start+13,DMA);
-
     VDP_loadTileSet(leftright56.tileset,extra_tiles_start+14,DMA);
-
 
     VDP_loadTileSet(updown12.tileset,extra_tiles_start+15,DMA);//1,2
     VDP_loadTileSet(updown13.tileset,extra_tiles_start+16,DMA);//1,3
@@ -258,7 +268,6 @@ void loadTiles()
 
     VDP_loadTileSet(updown45.tileset,extra_tiles_start+27,DMA);
     VDP_loadTileSet(updown46.tileset,extra_tiles_start+28,DMA);
-
     VDP_loadTileSet(updown56.tileset,extra_tiles_start+29,DMA);
 
     PAL_setPalette(PAL3,fallingSingleAll.palette->data,DMA);
@@ -306,6 +315,7 @@ void loadDebugFieldData()
 */
 }
 
+//global sprite initializations - temporary
 Sprite* sharedNextSpawnCloud;
 
 Sprite* patrako_idle;
@@ -325,8 +335,8 @@ void initialize()
     P1.blinkTimerNum=3;
     P2.blinkTimerNum=4;
     
-    //P1.optionsNumColors=globalNumColors;//set in options
-    P2.optionsNumColors=globalNumColors;
+    //P1.optionNumColors=globalNumColors;//set in options
+    P2.optionNumColors=globalNumColors;
 
     sharedNextSpawnCloud = SPR_addSpriteSafe(&cloud, -64, -64, TILE_ATTR(PAL0, FALSE, FALSE, FALSE));//TILE_ATTR(pal, prio, flipV, flipH)
     SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
@@ -342,27 +352,24 @@ void initialize()
         P1.fallingPieceSprite[createIndex] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
         P2.fallingPieceSprite[createIndex] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
 
-        SPR_setVisibility(P1.fallingPieceSprite[createIndex],HIDDEN);
-        SPR_setVisibility(P2.fallingPieceSprite[createIndex],HIDDEN);
-
         P1.nextPiece[createIndex]=randomRange(1,(globalNumColors-1));
         P2.nextPiece[createIndex]=P1.nextPiece[createIndex];//this doesn't work to give them the same color to start
 
-        if(P1.optionsNumColors==4 && P1.nextPiece[createIndex]==5)
+        if(P1.optionNumColors==4 && P1.nextPiece[createIndex]==5)
         {
             P1.nextPiece[createIndex]=randomRange(1,4);
         }
-        if(P2.optionsNumColors==4 && P2.nextPiece[createIndex]==5)
+        if(P2.optionNumColors==4 && P2.nextPiece[createIndex]==5)
         {
             P2.nextPiece[createIndex]=randomRange(1,4);
         }
     }
 
-    //P1.flag_status=spawningPiece;
-    //P2.flag_status=spawningPiece;
+    P1.flag_status=spawningPiece;
+    P2.flag_status=spawningPiece;
 
-    //P1.fallingIncrement=0;
-    //P2.fallingIncrement=0;
+    P1.fallingIncrement=0;
+    P2.fallingIncrement=0;
 
     P1.has_released_cycle=true;
     P2.has_released_cycle=true;
@@ -373,12 +380,14 @@ void initialize()
     P1.flag_allClear=false;
     P2.flag_allClear=false;
 
-    //P2.AIplayer=true;
-    if(P2.AIplayer==true)
+    if(P2.AIplayer==true)//set in options menu
     {
         P2.AIspawnCalc=true;
         for(u8 i=0;i<maxX+1;i++)P2.AIcolumnview[i]=16;
     }
+
+    P1.flag_allowed_to_swap=true;
+    P2.flag_allowed_to_swap=true;
 }
 
 void drawFallingSprite(Player* player)
@@ -401,41 +410,36 @@ void setSharedNext()
         sharedNext[i]=randomRange(1,(globalNumColors-1));
     }
 
-    sharedNextStatus=1;
+    flag_sharedNextStatus=true;
 }
-
-#define nextPieceYPos 4
 
 void drawPlayerNext(Player* player)
 {
+    #define nextYpos 4
+
     u8 playerNextxPos=15;
     if(player==&P2)playerNextxPos+=10;
-    u8 playerNextyPos=nextPieceYPos;
     u8 colorAdd=0;
 
     for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
     {
         colorAdd=(player->nextPiece[i]-1)<<2;//multiply by 4
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), playerNextxPos, playerNextyPos, 1, 1);
-
-        playerNextyPos++;        
+        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), playerNextxPos, nextYpos+i, 1, 1);    
     }
 }
 
 void drawSharedNext()
 {
     #define sharedNextxPos 20
-    u8 sharedNextyPos=nextPieceYPos;
     u8 colorAdd=0;
 
     for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
     {
         colorAdd=(sharedNext[i]-1)<<2;//multiply by 4
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, FALSE, FALSE, FALSE, 1+colorAdd), sharedNextxPos, sharedNextyPos, 1, 1);
-        sharedNextyPos++;
+        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), sharedNextxPos, nextYpos+i, 1, 1);
     }
 
-    sharedNextStatus=0;
+    flag_sharedNextStatus=false;
 }
 
 void doCycle(Player* player, u8 direction)
@@ -508,16 +512,37 @@ void createPiece(Player* player)
     else if(player==&P2)player->spriteX=spriteXorigin+p2spriteXcreate;
     player->spriteY=spriteYorigin+TILESIZE+TILESIZE+TILESIZE;
 
-    for (u8 createIndex=0;createIndex<3;createIndex++)
+    if(player->flag_currently_hold_swapping==false)
     {
-        player->fallingPiece[createIndex]=player->nextPiece[createIndex];//this is assigning color
-        SPR_setFrame(player->fallingPieceSprite[createIndex],player->fallingPiece[createIndex]-1);
-
-        player->nextPiece[createIndex]=sharedNext[createIndex];
-        if(player->optionsNumColors==4 && player->nextPiece[createIndex]==globalNumColors-1)
+        for (u8 createIndex=0;createIndex<3;createIndex++)
         {
-            player->nextPiece[createIndex]=randomRange(1,globalNumColors-2);
+            player->fallingPiece[createIndex]=player->nextPiece[createIndex];//this is assigning color
+            SPR_setFrame(player->fallingPieceSprite[createIndex],player->fallingPiece[createIndex]-1);
+
+            player->nextPiece[createIndex]=sharedNext[createIndex];
+            if(player->optionNumColors==4 && player->nextPiece[createIndex]==globalNumColors-1)
+            {
+                player->nextPiece[createIndex]=randomRange(1,globalNumColors-2);
+            }
         }
+
+        setSharedNext();//distinct from drawSharedNext()
+    }
+    else if(player->flag_currently_hold_swapping==true)
+    {
+        //KLog_U3("FALL - 0:",player->fallingPiece[0],"  1:",player->fallingPiece[1],"  2:",player->fallingPiece[2]);
+        //KLog_U3("HOLD - 0:",player->holdingPiece[0],"  1:",player->holdingPiece[1],"  2:",player->holdingPiece[2]);
+        u8 temp[3];
+        for(u8 i=0;i<3;i++)temp[i]=player->fallingPiece[i];//temp and fallingpiece has falling, holding has hold
+        //KLog_U3("TEMP - 0:",temp[0],"  1:",temp[1],"  2:",temp[2]);
+        for(u8 i=0;i<3;i++)player->fallingPiece[i]=player->holdingPiece[i];//temp has falling, falling and holding have hold
+        for(u8 i=0;i<3;i++)player->holdingPiece[i]=temp[i];
+        player->flag_currently_hold_swapping=false;
+
+        //KLog_U3("after FALL - 0:",player->fallingPiece[0],"  1:",player->fallingPiece[1],"  2:",player->fallingPiece[2]);
+        //KLog_U3("after HOLD - 0:",player->holdingPiece[0],"  1:",player->holdingPiece[1],"  2:",player->holdingPiece[2]);
+
+        for (u8 spriteIndex=0;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
     }
 
     player->xPosition=xSpawn;
@@ -525,10 +550,6 @@ void createPiece(Player* player)
     player->moveDelay=0;
 
     player->chainAmount=0;//reset chain counter
-
-    SPR_setVisibility(player->fallingPieceSprite[2],VISIBLE);//bottom piece
-    SPR_setVisibility(player->fallingPieceSprite[1],VISIBLE);//middle piece
-    SPR_setVisibility(player->fallingPieceSprite[0],VISIBLE);//top piece
     
     player->flag_locking=false;
     player->flag_status=fallingPiece;
@@ -536,8 +557,6 @@ void createPiece(Player* player)
     player->flag_drawNext=true;
 
     player->flag_hard_dropped=false;
-
-    setSharedNext();//distinct from drawSharedNext()
 }
 
 void checkMatches(Player* player)
@@ -545,21 +564,14 @@ void checkMatches(Player* player)
     player->howManyMatched=0;
 
     u8 connectionAmount,connectionColor;
-    bool matchedAlready[9][18];
-
-    for (u8 i=1;i<maxX+1;i++)//OPTIMIZE
-    {
-        for (u8 j=1;j<maxY+1;j++)//OPTIMIZE
-        {
-            matchedAlready[i][j]=false;
-        }
-    }
+    
+    bool matchedAlready[9][18]={false};
 
     for (u8 checkX=1;checkX<maxX+1;checkX++)//OPTIMIZE
     {
         for (u8 checkY=maxY+1;checkY>0;checkY--)//OPTIMIZE
         {
-            if(player->board[checkX][checkY]!=COLOR_BLANK && player->board[checkX][checkY]!=COLOR_GARBAGE && matchedAlready[checkX][checkY]==false)
+            if(player->board[checkX][checkY]!=COLOR_BLANK && player->board[checkX][checkY]!=COLOR_GARBAGE)
             {
                 if(player->board[checkX][checkY]==player->board[checkX+1][checkY])//match horizontally 2 tiles
                 {
@@ -573,14 +585,17 @@ void checkMatches(Player* player)
                         else if(player->board[advance][checkY]!=connectionColor)break;
                     }
 
-                    if(connectionAmount>=3){//KLog("***match - hori");
-                        
+                    if(connectionAmount>=3)
+                    {//KLog("***match - hori");
                         for (u8 xAddDestructionQueue=0;xAddDestructionQueue<connectionAmount;xAddDestructionQueue++)
                         {
-                            player->matchedQueueX[player->howManyMatched]=checkX+xAddDestructionQueue;
-                            player->matchedQueueY[player->howManyMatched]=checkY;
-                            player->howManyMatched++;
-                            matchedAlready[checkX+xAddDestructionQueue][checkY]=true;
+                            if(matchedAlready[checkX+xAddDestructionQueue][checkY]==false)
+                            {
+                                player->matchedQueueX[player->howManyMatched]=checkX+xAddDestructionQueue;
+                                player->matchedQueueY[player->howManyMatched]=checkY;
+                                player->howManyMatched++;
+                                matchedAlready[checkX+xAddDestructionQueue][checkY]=true;
+                            }
                         }
                         player->flag_status=blinkingMatches;//KLog("blinkingMatches");
                     }
@@ -601,13 +616,17 @@ void checkMatches(Player* player)
                         else if(player->board[checkX][advance]!=connectionColor)break;
                     }
 
-                    if(connectionAmount>=3){//KLog("***match - vert");
+                    if(connectionAmount>=3)
+                    {//KLog("***match - vert");
                         for (u8 yAddDestructionQueue=0;yAddDestructionQueue<connectionAmount;yAddDestructionQueue++)
                         {
-                            player->matchedQueueX[player->howManyMatched]=checkX;
-                            player->matchedQueueY[player->howManyMatched]=checkY-yAddDestructionQueue;
-                            player->howManyMatched++;
-                            matchedAlready[checkX][checkY-yAddDestructionQueue]=true;
+                            if(matchedAlready[checkX][checkY-yAddDestructionQueue]==false)
+                            {
+                                player->matchedQueueX[player->howManyMatched]=checkX;
+                                player->matchedQueueY[player->howManyMatched]=checkY-yAddDestructionQueue;
+                                player->howManyMatched++;
+                                matchedAlready[checkX][checkY-yAddDestructionQueue]=true;
+                            }
                         }
                         player->flag_status=blinkingMatches;//KLog("blinkingMatches");
                     }
@@ -615,7 +634,7 @@ void checkMatches(Player* player)
 
                 if(player->board[checkX][checkY]==player->board[checkX+1][checkY-1])//match diagonally up 2 tiles
                 {
-                    KLog_U2("++init match - diagUP at ",checkX,",",checkY);
+                    //KLog_U2("++init match - diagUP at ",checkX,",",checkY);
                     connectionAmount=2;
                     connectionColor=player->board[checkX][checkY];
                     
@@ -629,13 +648,17 @@ void checkMatches(Player* player)
                         incrementer++;
                     }
                     
-                    if(connectionAmount>=3){//KLog("***match - diagUp");
+                    if(connectionAmount>=3)
+                    {//KLog("***match - diagUp");
                         for (u8 i=0;i<connectionAmount;i++)
                         {
-                            player->matchedQueueX[player->howManyMatched]=checkX+i;
-                            player->matchedQueueY[player->howManyMatched]=checkY-i;
-                            player->howManyMatched++;
-                            matchedAlready[checkX+i][checkY-i]=true;
+                            if(matchedAlready[checkX+i][checkY-i]==false)
+                            {
+                                player->matchedQueueX[player->howManyMatched]=checkX+i;
+                                player->matchedQueueY[player->howManyMatched]=checkY-i;
+                                player->howManyMatched++;
+                                matchedAlready[checkX+i][checkY-i]=true;
+                            }
 
                             //sprintf(debug_string,"diagUP %d,%d",checkX+i,checkY-i);
                             //VDP_drawText(debug_string,13,19+i);
@@ -647,7 +670,7 @@ void checkMatches(Player* player)
 
                 if(player->board[checkX][checkY]==player->board[checkX+1][checkY+1])//match diagonally down 2 tiles
                 {
-                    KLog_U2("++init match - diagDOWN at ",checkX,",",checkY);
+                    //KLog_U2("++init match - diagDOWN at ",checkX,",",checkY);
                     connectionAmount=2;
                     connectionColor=player->board[checkX][checkY];
 
@@ -661,13 +684,17 @@ void checkMatches(Player* player)
                         incrementer++;
                     }
 
-                    if(connectionAmount>=3){//KLog("***match - diagDown");
+                    if(connectionAmount>=3)
+                    {//KLog("***match - diagDown");
                         for (u8 i=0;i<connectionAmount;i++)
                         {
-                            player->matchedQueueX[player->howManyMatched]=checkX+i;
-                            player->matchedQueueY[player->howManyMatched]=checkY+i;
-                            player->howManyMatched++;
-                            matchedAlready[checkX+i][checkY+i]=true;
+                            if(matchedAlready[checkX+i][checkY+i]==false)
+                            {
+                                player->matchedQueueX[player->howManyMatched]=checkX+i;
+                                player->matchedQueueY[player->howManyMatched]=checkY+i;
+                                player->howManyMatched++;
+                                matchedAlready[checkX+i][checkY+i]=true;
+                            }
 
                             //sprintf(debug_string,"diagDOWN %d,%d",checkX+i,checkY+i);
                             //VDP_drawText(debug_string,13,19+i);
@@ -716,7 +743,7 @@ void effectFastDrop(Player* player)
 
     player->fallingIncrement=0;
 
-    if(player->optionsDropStyle==HARD)player->flag_hard_dropped=true;
+    if(player->optionDropStyle==HARD)player->flag_hard_dropped=true;
 }
 
 void manageFalling(Player* player)
@@ -771,10 +798,9 @@ void pieceIntoBoard(Player* player)
         return;
     }
 
-//set falling sprites to invis
-    SPR_setVisibility(player->fallingPieceSprite[0],HIDDEN);
-    SPR_setVisibility(player->fallingPieceSprite[1],HIDDEN);
-    SPR_setVisibility(player->fallingPieceSprite[2],HIDDEN);
+    SPR_setPosition(player->fallingPieceSprite[0],-32,0);
+    SPR_setPosition(player->fallingPieceSprite[1],-32,0);
+    SPR_setPosition(player->fallingPieceSprite[2],-32,0);
 
     KLog_U1("^^pieceIntoBoard updated the draw parameters for P",player->playerNum);
     player->drawStartX=player->xPosition;
@@ -786,6 +812,8 @@ void pieceIntoBoard(Player* player)
     player->flag_redraw=true;
 
     if(player->AIplayer==true)player->AIspawnCalc=true;
+
+    player->flag_allowed_to_swap=true;
 
     player->flag_status=checkingMatches;
 }
@@ -882,9 +910,9 @@ void handleInput(Player* player, u16 buttons)
             }
         }
 
-        if (buttons & BUTTON_UP && player->moveDelay<=1 && player->optionsDropStyle>0)
+        if (buttons & BUTTON_UP && player->moveDelay<=1 && player->optionDropStyle>0)
         {
-            if(player->optionsDropStyle==SONIC)effectFastDrop(player);
+            if(player->optionDropStyle==SONIC)effectFastDrop(player);
             else if(player->yPosition>0)effectFastDrop(player);//slight delay for HARD DROP
         }
     }
@@ -909,14 +937,37 @@ void handleInput(Player* player, u16 buttons)
         }
     }
 
-//DISCARD-SKIP with start button
-    if((buttons & BUTTON_START) && player->releasedStart==true)
+    if(player->optionStartButton>0)
     {
-        createPiece(player);
-        player->releasedStart=false;
+    //DISCARD-SKIP with start button
+        if((buttons & BUTTON_START) && player->releasedStart==true && player->optionStartButton==SKIP && player->flag_allowed_to_swap==true)
+        {
+            createPiece(player);
+            player->releasedStart=false;
+            player->flag_allowed_to_swap=false;
+        }
+
+    //HOLD with start button
+        if((buttons & BUTTON_START) && player->releasedStart==true && player->optionStartButton==HOLD && player->flag_status==fallingPiece && player->flag_allowed_to_swap==true)
+        {
+            if(player->holdingPiece[0]!=0)
+            {
+                player->flag_currently_hold_swapping=true;
+                createPiece(player);
+            }
+            if(player->holdingPiece[0]==0)
+            {
+                for(u8 i=0;i<3;i++)player->holdingPiece[i]=player->fallingPiece[i];//save current falling piece to hold area
+                createPiece(player);
+            }
+            
+            player->releasedStart=false;
+            player->flag_allowed_to_swap=false;
+        }
+
+    //reset START button held
+        if(!(buttons & BUTTON_START) && player->releasedStart==false)player->releasedStart=true;
     }
-//reset START button held
-    if(!(buttons & BUTTON_START) && player->releasedStart==false)player->releasedStart=true;
 }
 
 void gameLogicSwitch(Player* player)
@@ -990,7 +1041,7 @@ void gameOver()
     if(P1.flag_status==toppedOut)
     {
         SPR_releaseSprite(patrako_cheer);
-        patrako_lost = SPR_addSpriteSafe(&patrakoLost, 106,152, TILE_ATTR(PAL2, FALSE, FALSE, FALSE));
+        patrako_lost = SPR_addSpriteSafe(&patrakoLost, 106,152, TILE_ATTR(PAL2, TRUE, FALSE, FALSE));
         SPR_setHFlip(patrako_lost, true);
     }
     else SPR_setVisibility(patrako_cheer,VISIBLE);
@@ -1014,15 +1065,15 @@ void gameOver()
 void loadCharacters()
 {
     PAL_setPalette(PAL2,patrakoIdle.palette->data,DMA);
-    patrako_idle = SPR_addSpriteSafe(&patrakoIdle, 110, 144, TILE_ATTR(PAL2, FALSE, FALSE, FALSE));
+    patrako_idle = SPR_addSpriteSafe(&patrakoIdle, 110, 144, TILE_ATTR(PAL2, TRUE, FALSE, FALSE));
 
-    patrako_cheer = SPR_addSpriteSafe(&patrakoCheer, 98, 130, TILE_ATTR(PAL2, FALSE, FALSE, FALSE));
+    patrako_cheer = SPR_addSpriteSafe(&patrakoCheer, 98, 130, TILE_ATTR(PAL2, TRUE, FALSE, FALSE));
     SPR_setVisibility(patrako_cheer,HIDDEN);
 
     patrako_is_cheering=false;
 
     PAL_setPalette(PAL1,sakura.palette->data,DMA);
-    sakuraSpr = SPR_addSpriteSafe(&sakura, 158, 136,TILE_ATTR(PAL1, FALSE, FALSE, FALSE));
+    sakuraSpr = SPR_addSpriteSafe(&sakura, 158, 136,TILE_ATTR(PAL1, TRUE, FALSE, FALSE));
 }
 
 void startupOptionsMenu()
@@ -1036,12 +1087,15 @@ void startupOptionsMenu()
     bool releasedLeftRight=true;
 
     P2.AIplayer=true;//turn this option on by default
-    P1.optionsDropStyle=SONIC;
+    P1.optionDropStyle=SONIC;
     s8 dropSelection=1;
+
+    P1.optionStartButton=SKIP;
+    s8 startSelection=1;
 
     bool selectedArrowsToggle=true;
     u8 selectedArrowsToggleCounter=0;
-    P1.optionsNumColors=5;//turn this option to 5 by default
+    P1.optionNumColors=5;//turn this option to 5 by default
 
     #define counterMaxAmount 6
 
@@ -1064,10 +1118,10 @@ void startupOptionsMenu()
         if(!(optionsMenuButtons & BUTTON_DOWN) && !(optionsMenuButtons & BUTTON_UP))releasedUpDownButton=true;
         if(!(optionsMenuButtons & BUTTON_LEFT) && !(optionsMenuButtons & BUTTON_RIGHT))releasedLeftRight=true;
 
-        if(menuPosition>2)menuPosition=0;
-        if(menuPosition<0)menuPosition=2;
+        if(menuPosition>3)menuPosition=0;
+        if(menuPosition<0)menuPosition=3;
 
-//start button
+//start button - exit to game
         if(optionsMenuButtons & BUTTON_START)
         {
             VDP_clearPlane(BG_A,TRUE);
@@ -1103,20 +1157,36 @@ void startupOptionsMenu()
         }
         else if(menuPosition==2 && releasedLeftRight==true)
         {
-            if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P1.optionsNumColors==5)
+            if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P1.optionNumColors==5)
             {
-                P1.optionsNumColors=4;
+                P1.optionNumColors=4;
                 releasedLeftRight=false;
             }
-            else if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P1.optionsNumColors==4)
+            else if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P1.optionNumColors==4)
             {
-                P1.optionsNumColors=5;
+                P1.optionNumColors=5;
+                releasedLeftRight=false;
+            }
+        }
+        else if(menuPosition==3 && releasedLeftRight==true)
+        {
+            if(optionsMenuButtons & BUTTON_RIGHT)
+            {
+                startSelection++;
+                releasedLeftRight=false;
+            }
+            if(optionsMenuButtons & BUTTON_LEFT)
+            {
+                startSelection--;
                 releasedLeftRight=false;
             }
         }
 
         if(dropSelection>2)dropSelection=0;
         else if(dropSelection<0)dropSelection=2;
+
+        if(startSelection>2)startSelection=0;
+        else if(startSelection<0)startSelection=2;
 
         SYS_doVBlankProcess();
 
@@ -1171,7 +1241,7 @@ void startupOptionsMenu()
         }
 
         VDP_drawText(debug_string,optionsX,optionsBaseY+6);
-        P1.optionsDropStyle=dropSelection;
+        P1.optionDropStyle=dropSelection;
 
 //CPU option
         if(menuPosition!=1)
@@ -1198,28 +1268,71 @@ void startupOptionsMenu()
 //COLORS option
         if(menuPosition!=2)
         {
-            if(P1.optionsNumColors==5)sprintf(debug_string," COLORS:[5]");
-            else if(P1.optionsNumColors==4)sprintf(debug_string," COLORS:[4]");
+            if(P1.optionNumColors==5)sprintf(debug_string," COLORS:[5]");
+            else if(P1.optionNumColors==4)sprintf(debug_string," COLORS:[4]");
         }
         else if(menuPosition==2)
         {
             if(selectedArrowsToggleCounter==true)
             {
-                if(P1.optionsNumColors==5)sprintf(debug_string,">COLORS:[5]");
-                else if(P1.optionsNumColors==4)sprintf(debug_string,">COLORS:[4]");
+                if(P1.optionNumColors==5)sprintf(debug_string,">COLORS:[5]");
+                else if(P1.optionNumColors==4)sprintf(debug_string,">COLORS:[4]");
             }
             else
             {
-                if(P1.optionsNumColors==5)sprintf(debug_string," COLORS:[5]");
-                else if(P1.optionsNumColors==4)sprintf(debug_string," COLORS:[4]");
+                if(P1.optionNumColors==5)sprintf(debug_string," COLORS:[5]");
+                else if(P1.optionNumColors==4)sprintf(debug_string," COLORS:[4]");
             }
         }
 
     VDP_drawText(debug_string,optionsX-2,optionsBaseY+10);
 
+//START option
+        if(menuPosition!=3)
+        {
+            switch(startSelection)
+            {
+                case OFF:
+                sprintf(debug_string," START:[OFF]");
+                break;
+
+                case SKIP:
+                sprintf(debug_string," START:[SKIP]");
+                break;
+
+                case HOLD:
+                sprintf(debug_string," START:[HOLD]");
+                break;             
+            }
+        }
+        else if(menuPosition==3)
+        {
+            switch(startSelection)
+            {
+                case OFF:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">START:[OFF]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," START:[OFF]");
+                break;
+
+                case SKIP:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">START:[SKIP]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," START:[SKIP]");
+                break;
+
+                case HOLD:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">START:[HOLD]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," START:[HOLD]");
+                break;   
+            }  
+        }
+
+    VDP_drawText(debug_string,optionsX-1,optionsBaseY+12);
+    P1.optionStartButton=startSelection;
+
+
 //tell them to press start to leave
         sprintf(debug_string,"PRESS START");
-        VDP_drawText(debug_string,optionsX,optionsBaseY+14);  
+        VDP_drawText(debug_string,optionsX,optionsBaseY+16);  
     }
 }
 
@@ -1248,6 +1361,16 @@ void drawCombosAndChains(Player* player)
 
         sprintf(debug_string,"        ");//this is to clear out the chain text
         VDP_drawText(debug_string,2+xPosShiftP2,2);
+    }
+
+//temporary sprite animation for P1
+    if(P1.chainAmount>1 && P1.flag_status<=fallingPiece)
+    {
+        SPR_setVisibility(patrako_cheer,VISIBLE);
+        SPR_setVisibility(patrako_idle,HIDDEN);
+        SPR_setFrame(patrako_cheer,0);
+        patrako_is_cheering=true;
+        getTimer(33,true);//start a timer for this
     }
 }
 
