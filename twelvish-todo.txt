@@ -1,5 +1,3 @@
-option: fall pieces 2 instead of 3
-======
 do not draw all inner sections every time! optimize this
 *add limit to the furthest X (endX)
 *do an addition to tileIncrementer based on how much is gone
