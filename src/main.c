@@ -39,7 +39,6 @@ int main()
 
     initialize();
 
-    setSharedNext();
     drawPlayerNext(&P1);
     drawPlayerNext(&P2);
 
@@ -60,9 +59,9 @@ int main()
         manageDrawing(&P1);
         manageDrawing(&P2);
 
-        if(flag_sharedNextStatus==true)drawSharedNext();
+        if(globalSpawnCloudVisibilityTimer>20)SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);//hide it after it plays
 
-        if(globalSpawnCloudVisibilityTimer>20)SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
+        if(flag_sharedNextDraw==true)drawSharedNext();
 
         if(getTimer(33,false)>=62000 && patrako_is_cheering==true)
         {
@@ -214,21 +213,4 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
         }
     }
     KLog_U1("tileIncrementer ended at ",tileIncrementer);//this is ending at 32 - shouldn't it be only 28?
-}
-
-void manageDrawing(Player* player)
-{
-    drawCombosAndChains(player);//this needs to be restricted
-
-    if(player->flag_status==fallingPiece)drawFallingSprite(player);//only draw if we're falling
-
-    if(player->flag_redraw==true){
-        printBoard(player, player->drawStartX,player->drawStartY,player->drawEndX,player->drawEndY);//printBoard(&P1, 1,1,maxX+1,maxY+2);
-        player->flag_redraw=false;
-    }
-
-    if(player->flag_drawNext==true){
-        drawPlayerNext(player);
-        player->flag_drawNext=false;
-    }
 }

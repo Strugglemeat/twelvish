@@ -74,6 +74,8 @@ typedef struct {
     bool flag_currently_hold_swapping;
     bool flag_allowed_to_swap;
 
+    s16 numTimesSpawned;
+
 } Player;
 
 Player P1;
@@ -91,6 +93,7 @@ void drawFallingSprite(Player* player);
 void drawFullTile(Player* player, u8 xPos, u8 yPos);
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY);
 void drawCombosAndChains(Player* player);
+void manageDrawing(Player* player);
 
 void gameLogicSwitch(Player* player);
 
@@ -101,11 +104,11 @@ bool collisionTest(Player* player, u8 direction);
 void checkMatches(Player* player);
 void processGravity(Player* player);
 
-void setSharedNext();
 void drawSharedNext();
 void drawPlayerNext(Player* player);
-void createPiece(Player* player);
-void manageDrawing(Player* player);
+void processSpawn(Player* player);
+void swapPiece(Player* player);
+void generatePiece(Player* player);
 
 void effectFastDrop(Player* player);
 void manageFalling(Player* player);
@@ -127,7 +130,7 @@ u16 leftrightLUT(u16 section);
 bool leftrightLUTflag(u16 section);
 
 u8 sharedNext[fallingPieceNumberOfTiles];
-bool flag_sharedNextStatus;
+bool flag_sharedNextDraw;
 char debug_string[40] = "";
 
 #define TILESIZE 12
@@ -321,6 +324,7 @@ void loadDebugFieldData()
 
 //global sprite initializations - temporary
 Sprite* sharedNextSpawnCloud;
+u8 globalSpawnCloudVisibilityTimer;//replace with SPR_getAnimationDone(sharedNextSpawnCloud) in later SGDK
 
 Sprite* patrako_idle;
 Sprite* patrako_lost;
@@ -328,6 +332,9 @@ Sprite* patrako_cheer;
 bool patrako_is_cheering;
 
 Sprite* sakuraSpr;
+
+u8 initialNextPiece[fallingPieceNumberOfTiles];//this to ensure that both players get the same next piece at round start
+u8 spawnSamePieceCounter;
 
 void initialize()
 {
@@ -339,32 +346,38 @@ void initialize()
     P1.blinkTimerNum=3;
     P2.blinkTimerNum=4;
 
-    sharedNextSpawnCloud = SPR_addSpriteSafe(&cloud, -64, -64, TILE_ATTR(PAL0, FALSE, FALSE, FALSE));//TILE_ATTR(pal, prio, flipV, flipH)
+//temporary next cloud animation
+    sharedNextSpawnCloud = SPR_addSpriteSafe(&cloud, -64, -64, TILE_ATTR(PAL0, TRUE, FALSE, FALSE));//TILE_ATTR(pal, prio, flipV, flipH)
     SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
     SPR_setPosition(sharedNextSpawnCloud,148,27);
 
+//temporary characters
     loadCharacters();
 
     clearBoardData(&P1);
     clearBoardData(&P2);
 
-    for (u8 createIndex=0;createIndex<3;createIndex++)
+    u8 initialDroppedPiece[fallingPieceNumberOfTiles];
+
+    for (u8 createIndex=0;createIndex<fallingPieceNumberOfTiles;createIndex++)
     {
         P1.fallingPieceSprite[createIndex] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
         P2.fallingPieceSprite[createIndex] = SPR_addSpriteSafe(&fallingSingleAll, -TILESIZE, -TILESIZE, TILE_ATTR(PAL3, TRUE, FALSE, FALSE));
 
-        P1.nextPiece[createIndex]=randomRange(1,(globalNumColors-1));
-        P2.nextPiece[createIndex]=P1.nextPiece[createIndex];//this doesn't work to give them the same color to start
+        initialDroppedPiece[createIndex]=randomRange(1,(globalNumColors-1));
 
-        if(P1.optionNumColors==4 && P1.nextPiece[createIndex]==5)
-        {
-            P1.nextPiece[createIndex]=randomRange(1,4);
-        }
-        if(P2.optionNumColors==4 && P2.nextPiece[createIndex]==5)
-        {
-            P2.nextPiece[createIndex]=randomRange(1,4);
-        }
+        P1.nextPiece[createIndex]=initialDroppedPiece[createIndex];
+        P2.nextPiece[createIndex]=initialDroppedPiece[createIndex];
+
+        initialNextPiece[createIndex]=randomRange(1,(globalNumColors-1));
+
+        if(P1.optionNumColors==4 && P1.nextPiece[createIndex]==5)P1.nextPiece[createIndex]=randomRange(1,4);
+        if(P2.optionNumColors==4 && P2.nextPiece[createIndex]==5)P2.nextPiece[createIndex]=randomRange(1,4);
     }
+
+    for(u8 i=0;i<fallingPieceNumberOfTiles;i++)sharedNext[i]=randomRange(1,(globalNumColors-1));
+
+    spawnSamePieceCounter=0;
 
     P1.flag_status=spawningPiece;
     P2.flag_status=spawningPiece;
@@ -400,6 +413,9 @@ void initialize()
     P2.optionDiagonalMatching=true;
 
     P2.optionPiecesDropping=3;
+
+    generatePiece(&P1);
+    generatePiece(&P2);
 }
 
 void drawFallingSprite(Player* player)
@@ -407,22 +423,6 @@ void drawFallingSprite(Player* player)
     SPR_setPosition(player->fallingPieceSprite[2],player->spriteX,player->spriteY);
     SPR_setPosition(player->fallingPieceSprite[1],player->spriteX,player->spriteY-TILESIZE);
     if(player->optionPiecesDropping==3)SPR_setPosition(player->fallingPieceSprite[0],player->spriteX,player->spriteY-TILESIZE-TILESIZE);
-}
-
-u8 globalSpawnCloudVisibilityTimer;//replace with SPR_getAnimationDone(sharedNextSpawnCloud) in later SGDK
-
-void setSharedNext()
-{
-    SPR_setFrame(sharedNextSpawnCloud, 0);//cloud sprite
-    SPR_setVisibility(sharedNextSpawnCloud,VISIBLE);
-    globalSpawnCloudVisibilityTimer=0;
-
-    for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
-    {
-        sharedNext[i]=randomRange(1,(globalNumColors-1));
-    }
-
-    flag_sharedNextStatus=true;
 }
 
 void drawPlayerNext(Player* player)
@@ -451,7 +451,11 @@ void drawSharedNext()
         VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), sharedNextxPos, nextYpos+i, 1, 1);
     }
 
-    flag_sharedNextStatus=false;
+    SPR_setFrame(sharedNextSpawnCloud, 0);//cloud sprite
+    SPR_setVisibility(sharedNextSpawnCloud,VISIBLE);
+    globalSpawnCloudVisibilityTimer=0;
+
+    flag_sharedNextDraw=false;
 }
 
 void doCycle(Player* player, u8 direction)
@@ -537,59 +541,88 @@ bool collisionTest(Player* player, u8 direction)
     return false;
 }
 
-void createPiece(Player* player)
+void generatePiece(Player* player)
 {
+    for (u8 createIndex=(fallingPieceNumberOfTiles-player->optionPiecesDropping);createIndex<fallingPieceNumberOfTiles;createIndex++)//for (u8 createIndex=1;createIndex<3;createIndex++)
+    {
+        player->fallingPiece[createIndex]=player->nextPiece[createIndex];
+        
+        SPR_setFrame(player->fallingPieceSprite[createIndex],player->fallingPiece[createIndex]-1);
+
+        player->nextPiece[createIndex]=sharedNext[createIndex];
+
+        sharedNext[createIndex]=randomRange(1,(globalNumColors-1));//set the next sharednextpieces
+
+        if(player->optionNumColors==4 && player->nextPiece[createIndex]==globalNumColors-1)player->nextPiece[createIndex]=randomRange(1,globalNumColors-2);
+    }
+    
+    flag_sharedNextDraw=true;
+    player->numTimesSpawned++;
+    player->flag_drawNext=true;
+}
+
+void swapPiece(Player* player)
+{
+    //KLog_U3("FALL - 0:",player->fallingPiece[0],"  1:",player->fallingPiece[1],"  2:",player->fallingPiece[2]);
+    //KLog_U3("HOLD - 0:",player->holdingPiece[0],"  1:",player->holdingPiece[1],"  2:",player->holdingPiece[2]);
+    u8 temp[fallingPieceNumberOfTiles];
+    for(u8 i=0;i<fallingPieceNumberOfTiles;i++)temp[i]=player->fallingPiece[i];//temp and fallingpiece has falling, holding has hold
+    //KLog_U3("TEMP - 0:",temp[0],"  1:",temp[1],"  2:",temp[2]);
+    for(u8 i=0;i<fallingPieceNumberOfTiles;i++)player->fallingPiece[i]=player->holdingPiece[i];//temp has falling, falling and holding have hold
+    for(u8 i=0;i<fallingPieceNumberOfTiles;i++)player->holdingPiece[i]=temp[i];
+    player->flag_currently_hold_swapping=false;
+
+    //KLog_U3("after FALL - 0:",player->fallingPiece[0],"  1:",player->fallingPiece[1],"  2:",player->fallingPiece[2]);
+    //KLog_U3("after HOLD - 0:",player->holdingPiece[0],"  1:",player->holdingPiece[1],"  2:",player->holdingPiece[2]);
+
+    for (u8 spriteIndex=fallingPieceNumberOfTiles-player->optionPiecesDropping;spriteIndex<fallingPieceNumberOfTiles;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);//for (u8 spriteIndex=0;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
+}
+
+void processSpawn(Player* player)
+{
+//set up next piece
+    /*
+    if(player->flag_currently_hold_swapping==false)generatePiece(player);
+    else if(player->flag_currently_hold_swapping==true)swapPiece(player);
+    */
+    if(player->flag_currently_hold_swapping==true)swapPiece(player);
+
+//set X and Y positions
+//sprite
     if(player==&P1)player->spriteX=spriteXorigin;
     else if(player==&P2)player->spriteX=spriteXorigin+p2spriteXcreate;
     player->spriteY=spriteYorigin+TILESIZE+TILESIZE+TILESIZE;
-
-    if(player->flag_currently_hold_swapping==false)
-    {
-        //for (u8 createIndex=1;createIndex<3;createIndex++)
-        for (u8 createIndex=(fallingPieceNumberOfTiles-player->optionPiecesDropping);createIndex<fallingPieceNumberOfTiles;createIndex++)
-        {
-            player->fallingPiece[createIndex]=player->nextPiece[createIndex];//this is assigning color
-            SPR_setFrame(player->fallingPieceSprite[createIndex],player->fallingPiece[createIndex]-1);
-
-            player->nextPiece[createIndex]=sharedNext[createIndex];
-            if(player->optionNumColors==4 && player->nextPiece[createIndex]==globalNumColors-1)
-            {
-                player->nextPiece[createIndex]=randomRange(1,globalNumColors-2);
-            }
-        }
-
-        setSharedNext();//distinct from drawSharedNext()
-    }
-    else if(player->flag_currently_hold_swapping==true)
-    {
-        //KLog_U3("FALL - 0:",player->fallingPiece[0],"  1:",player->fallingPiece[1],"  2:",player->fallingPiece[2]);
-        //KLog_U3("HOLD - 0:",player->holdingPiece[0],"  1:",player->holdingPiece[1],"  2:",player->holdingPiece[2]);
-        u8 temp[fallingPieceNumberOfTiles];
-        for(u8 i=0;i<fallingPieceNumberOfTiles;i++)temp[i]=player->fallingPiece[i];//temp and fallingpiece has falling, holding has hold
-        //KLog_U3("TEMP - 0:",temp[0],"  1:",temp[1],"  2:",temp[2]);
-        for(u8 i=0;i<fallingPieceNumberOfTiles;i++)player->fallingPiece[i]=player->holdingPiece[i];//temp has falling, falling and holding have hold
-        for(u8 i=0;i<fallingPieceNumberOfTiles;i++)player->holdingPiece[i]=temp[i];
-        player->flag_currently_hold_swapping=false;
-
-        //KLog_U3("after FALL - 0:",player->fallingPiece[0],"  1:",player->fallingPiece[1],"  2:",player->fallingPiece[2]);
-        //KLog_U3("after HOLD - 0:",player->holdingPiece[0],"  1:",player->holdingPiece[1],"  2:",player->holdingPiece[2]);
-
-        //for (u8 spriteIndex=0;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
-        for (u8 spriteIndex=fallingPieceNumberOfTiles-player->optionPiecesDropping;spriteIndex<fallingPieceNumberOfTiles;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
-    }
-
+//tile
     player->xPosition=xSpawn;
     player->yPosition=ySpawn;
-    player->moveDelay=0;
 
+//reset various movement aspects
+    player->moveDelay=0;
     player->chainAmount=0;//reset chain counter
-    
     player->flag_locking=false;
+    player->flag_hard_dropped=false;
+
+//move player status forward
     player->flag_status=fallingPiece;
 
-    player->flag_drawNext=true;
-
-    player->flag_hard_dropped=false;
+//in order to ensure both players have the same next piece at start
+    if(spawnSamePieceCounter>2)return;
+    else if(P1.numTimesSpawned==1 && player==&P1)//all this to make sure both players have the same starting out next piece
+    {
+        for (u8 createIndex=(fallingPieceNumberOfTiles-player->optionPiecesDropping);createIndex<fallingPieceNumberOfTiles;createIndex++)
+        {
+            P1.nextPiece[createIndex]=initialNextPiece[createIndex];  
+        }
+        spawnSamePieceCounter++;
+    }
+    else if(P2.numTimesSpawned==1 && player==&P2)
+    {
+        for (u8 createIndex=(fallingPieceNumberOfTiles-player->optionPiecesDropping);createIndex<fallingPieceNumberOfTiles;createIndex++)
+        {
+            P2.nextPiece[createIndex]=initialNextPiece[createIndex];  
+        }
+        spawnSamePieceCounter++;
+    }
 }
 
 void checkMatches(Player* player)
@@ -751,28 +784,6 @@ void checkMatches(Player* player)
     //if(player==&P1)KLog_U1("()()()howManyMatched: ",player->howManyMatched);
 }
 
-/*
-void sendDamage(Player* player, u8 amountDamageTaken)
-{
-    u8 sendingX=1;
-    u8 sendingY=0;
-
-    for(u8 damageAmount=0;damageAmount<amountDamageTaken;damageAmount++)
-    {
-        player->board[sendingX][sendingY]=6;
-        sendingX++;
-        if(sendingX>7)
-            {
-                sendingX=1;
-                sendingY++;
-            }
-    }
-    player->damageToBeReceived-=amountDamageTaken;
-
-    processGravity(player);
-}
-*/
-
 void effectFastDrop(Player* player)
 {
     s8 i;//has to be outside of the for loop so it can be used afterwards
@@ -833,14 +844,13 @@ void pieceIntoBoard(Player* player)
     player->board[player->xPosition][player->yPosition-1]=player->fallingPiece[1];
     player->board[player->xPosition][player->yPosition-2]=player->fallingPiece[0];
 
-    if(player->board[4][1]!=0 || player->yPosition<=2)
-    //if(player->yPosition<=2)
+    if(player->board[4][1]!=0 || player->yPosition<=2)//check for top-out
     {
         player->flag_status=toppedOut;
         return;
     }
 
-    SPR_setPosition(player->fallingPieceSprite[0],-32,0);
+    SPR_setPosition(player->fallingPieceSprite[0],-32,0);//move the sprites away
     SPR_setPosition(player->fallingPieceSprite[1],-32,0);
     SPR_setPosition(player->fallingPieceSprite[2],-32,0);
 
@@ -849,13 +859,15 @@ void pieceIntoBoard(Player* player)
     player->drawStartY=player->yPosition-2;
     player->drawEndX=player->xPosition+1;
     player->drawEndY=player->yPosition+1;
-    //the above are rock-solid and should stay as-is - other updates to the drawing coordinates should come from other functions
+    //the above are solid and should stay as-is - other updates to the drawing coordinates should come from other functions
 
     player->flag_redraw=true;
 
     if(player->AIplayer==true)player->AIspawnCalc=true;
 
     player->flag_allowed_to_swap=true;
+
+    generatePiece(player);
 
     player->flag_status=checkingMatches;
 }
@@ -884,25 +896,20 @@ void processGravity(Player* player)
 
     if(howMuchGravity>0)
     {
-        KLog("^^processGravity updated the draw parameters");
+        KLog_U2("^^processGravity updated drawStartY, from ",player->drawStartY," to ",player->drawStartY-1);
         player->drawStartY--;
-        //player->drawStartY=firstGravityY-1;//fix this up, excess variables in use
-        //player->drawEndX++;//is this necessary?
-
-        //player->drawStartX=1;
-        //player->drawEndX=maxX+1;
-        //player->drawEndY=maxY+1;
 
         player->flag_redraw=true;
         player->flag_status=checkingMatches;
+
+        //KLog_U1("gravity moved ",howMuchGravity);
     }
     else if(howMuchGravity==0)
     {
-        KLog("processGravity: ZERO GRAVITY TO PROCESS");
+        //KLog("processGravity: ZERO GRAVITY TO PROCESS");
         player->flag_status=spawningPiece;
     }
 
-    //if(howMuchGravity>0)KLog_U1("gravity moved ",howMuchGravity);
 }
 
 void manageDelays()
@@ -913,7 +920,7 @@ void manageDelays()
     if(P1.cycleDelay>0)P1.cycleDelay--;
     if(P2.cycleDelay>0)P2.cycleDelay--;
 
-    if(globalSpawnCloudVisibilityTimer<40)globalSpawnCloudVisibilityTimer++;
+    if(globalSpawnCloudVisibilityTimer<40)globalSpawnCloudVisibilityTimer++;//temporary
 }
 
 void handleInput(Player* player, u16 buttons)
@@ -984,7 +991,7 @@ void handleInput(Player* player, u16 buttons)
     //DISCARD-SKIP with start button
         if((buttons & BUTTON_START) && player->releasedStart==true && player->optionStartButton==SKIP && player->flag_allowed_to_swap==true)
         {
-            createPiece(player);
+            processSpawn(player);
             player->releasedStart=false;
             player->flag_allowed_to_swap=false;
         }
@@ -992,16 +999,17 @@ void handleInput(Player* player, u16 buttons)
     //HOLD with start button
         if((buttons & BUTTON_START) && player->releasedStart==true && player->optionStartButton==HOLD && player->flag_status==fallingPiece && player->flag_allowed_to_swap==true)
         {
-            if(player->holdingPiece[1]!=0)
+            if(player->holdingPiece[1]!=0)//if we have a piece saved
             {
                 player->flag_currently_hold_swapping=true;
-                createPiece(player);
+                processSpawn(player);
             }
-            if(player->holdingPiece[1]==0)
+            else if(player->holdingPiece[1]==0)//if we don't have a piece saved
             {
                 //for(u8 i=0;i<3;i++)player->holdingPiece[i]=player->fallingPiece[i];//save current falling piece to hold area
                 for(u8 i=(fallingPieceNumberOfTiles-player->optionPiecesDropping);i<fallingPieceNumberOfTiles;i++)player->holdingPiece[i]=player->fallingPiece[i];//save current falling piece to hold area
-                createPiece(player);
+                generatePiece(player);
+                processSpawn(player);
             }
             
             player->releasedStart=false;
@@ -1019,7 +1027,7 @@ void gameLogicSwitch(Player* player)
     {
         case spawningPiece:
             //KLog("$spawned piece");
-            createPiece(player);
+            processSpawn(player);
             break;
 
         case fallingPiece:
@@ -1060,9 +1068,6 @@ void printDebug()
     //if(SYS_getCPULoad()>100)KLog("CPU usage over 100%");
     if(SYS_getCPULoad()>90)KLog_U2("CPU usage over 90%, P1 status: ",P1.flag_status," P2 status: ",P2.flag_status);
 
-    //sprintf(debug_string,"P1 %d", P1.flag_status);
-    //VDP_drawText(debug_string,32,1);
-
     if(P1.flag_status==toppedOut)
     {
         sprintf(debug_string,"TOPPED OUT");
@@ -1073,6 +1078,9 @@ void printDebug()
         sprintf(debug_string,"TOPPED OUT");
         VDP_drawText(debug_string,28,2);
     }
+
+    drawCombosAndChains(&P1);//this needs to be restricted
+    drawCombosAndChains(&P2);
 }
 
 void gameOver()
@@ -1910,3 +1918,41 @@ void drawFullTile(Player* player, u8 xPos, u8 yPos)
         }        
     }
 }
+
+void manageDrawing(Player* player)
+{
+    if(player->flag_status==fallingPiece)drawFallingSprite(player);//only draw if we're falling
+
+    if(player->flag_redraw==true){
+        printBoard(player, player->drawStartX,player->drawStartY,player->drawEndX,player->drawEndY);
+        //printBoard(&P1, 1,1,maxX+1,maxY+2);
+        player->flag_redraw=false;
+    }
+
+    if(player->flag_drawNext==true){
+        drawPlayerNext(player);
+        player->flag_drawNext=false;
+    }
+}
+
+/*
+void sendDamage(Player* player, u8 amountDamageTaken)
+{
+    u8 sendingX=1;
+    u8 sendingY=0;
+
+    for(u8 damageAmount=0;damageAmount<amountDamageTaken;damageAmount++)
+    {
+        player->board[sendingX][sendingY]=6;
+        sendingX++;
+        if(sendingX>7)
+            {
+                sendingX=1;
+                sendingY++;
+            }
+    }
+    player->damageToBeReceived-=amountDamageTaken;
+
+    processGravity(player);
+}
+*/
