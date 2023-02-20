@@ -62,6 +62,8 @@ typedef struct {
     u8 optionNumColors;
     u8 optionStartButton;
     u8 optionNumConnections;
+    bool optionDiagonalMatching;
+    u8 optionPiecesDropping;
 
 //timers
     u8 blinkTimerNum;
@@ -336,9 +338,6 @@ void initialize()
     P2.fallLockingTimerNum=2;
     P1.blinkTimerNum=3;
     P2.blinkTimerNum=4;
-    
-    //P1.optionNumColors=globalNumColors;//set in options
-    P2.optionNumColors=globalNumColors;
 
     sharedNextSpawnCloud = SPR_addSpriteSafe(&cloud, -64, -64, TILE_ATTR(PAL0, FALSE, FALSE, FALSE));//TILE_ATTR(pal, prio, flipV, flipH)
     SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
@@ -388,18 +387,26 @@ void initialize()
         for(u8 i=0;i<maxX+1;i++)P2.AIcolumnview[i]=16;
     }
 
+//options
     P1.flag_allowed_to_swap=true;
     P2.flag_allowed_to_swap=true;
 
+    //P1.optionNumColors=globalNumColors;//set in options
+    P2.optionNumColors=globalNumColors;
+
     //P1.optionNumConnections=2;
     P2.optionNumConnections=3;
+
+    P2.optionDiagonalMatching=true;
+
+    P2.optionPiecesDropping=3;
 }
 
 void drawFallingSprite(Player* player)
 {
     SPR_setPosition(player->fallingPieceSprite[2],player->spriteX,player->spriteY);
     SPR_setPosition(player->fallingPieceSprite[1],player->spriteX,player->spriteY-TILESIZE);
-    SPR_setPosition(player->fallingPieceSprite[0],player->spriteX,player->spriteY-TILESIZE-TILESIZE);
+    if(player->optionPiecesDropping==3)SPR_setPosition(player->fallingPieceSprite[0],player->spriteX,player->spriteY-TILESIZE-TILESIZE);
 }
 
 u8 globalSpawnCloudVisibilityTimer;//replace with SPR_getAnimationDone(sharedNextSpawnCloud) in later SGDK
@@ -426,7 +433,7 @@ void drawPlayerNext(Player* player)
     if(player==&P2)playerNextxPos+=10;
     u8 colorAdd=0;
 
-    for (u8 i=0;i<fallingPieceNumberOfTiles;i++)
+    for (u8 i=(fallingPieceNumberOfTiles-player->optionPiecesDropping);i<fallingPieceNumberOfTiles;i++)    //for (u8 i=0;i<player->optionPiecesDropping;i++)
     {
         colorAdd=(player->nextPiece[i]-1)<<2;//multiply by 4
         VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), playerNextxPos, nextYpos+i, 1, 1);    
@@ -451,22 +458,41 @@ void doCycle(Player* player, u8 direction)
 {
     u8 tempPieceHolder;
 
-    if(direction==DOWN)
+    if(player->optionPiecesDropping==3)
     {
-        tempPieceHolder=player->fallingPiece[0];
-        player->fallingPiece[0]=player->fallingPiece[2];
-        player->fallingPiece[2]=player->fallingPiece[1];
-        player->fallingPiece[1]=tempPieceHolder;
+        if(direction==DOWN)
+        {
+            tempPieceHolder=player->fallingPiece[0];
+            player->fallingPiece[0]=player->fallingPiece[2];
+            player->fallingPiece[2]=player->fallingPiece[1];
+            player->fallingPiece[1]=tempPieceHolder;
+        }
+        else if(direction==UP)
+        {
+            tempPieceHolder=player->fallingPiece[0];
+            player->fallingPiece[0]=player->fallingPiece[1];
+            player->fallingPiece[1]=player->fallingPiece[2];
+            player->fallingPiece[2]=tempPieceHolder;
+        }
     }
-    else if(direction==UP)
+    else if(player->optionPiecesDropping==2)
     {
-        tempPieceHolder=player->fallingPiece[0];
-        player->fallingPiece[0]=player->fallingPiece[1];
-        player->fallingPiece[1]=player->fallingPiece[2];
-        player->fallingPiece[2]=tempPieceHolder;
+        if(direction==DOWN)
+        {
+            tempPieceHolder=player->fallingPiece[1];
+            player->fallingPiece[1]=player->fallingPiece[2];
+            player->fallingPiece[2]=tempPieceHolder;
+        }
+        else if(direction==UP)
+        {
+            tempPieceHolder=player->fallingPiece[1];
+            player->fallingPiece[1]=player->fallingPiece[2];
+            player->fallingPiece[2]=tempPieceHolder;
+        }        
     }
 
-    for (u8 spriteIndex=0;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
+    //for (u8 spriteIndex=0;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
+    for (u8 spriteIndex=(fallingPieceNumberOfTiles-player->optionPiecesDropping);spriteIndex<fallingPieceNumberOfTiles;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);    
 }
 
 bool collisionTest(Player* player, u8 direction)
@@ -519,7 +545,8 @@ void createPiece(Player* player)
 
     if(player->flag_currently_hold_swapping==false)
     {
-        for (u8 createIndex=0;createIndex<3;createIndex++)
+        //for (u8 createIndex=1;createIndex<3;createIndex++)
+        for (u8 createIndex=(fallingPieceNumberOfTiles-player->optionPiecesDropping);createIndex<fallingPieceNumberOfTiles;createIndex++)
         {
             player->fallingPiece[createIndex]=player->nextPiece[createIndex];//this is assigning color
             SPR_setFrame(player->fallingPieceSprite[createIndex],player->fallingPiece[createIndex]-1);
@@ -537,17 +564,18 @@ void createPiece(Player* player)
     {
         //KLog_U3("FALL - 0:",player->fallingPiece[0],"  1:",player->fallingPiece[1],"  2:",player->fallingPiece[2]);
         //KLog_U3("HOLD - 0:",player->holdingPiece[0],"  1:",player->holdingPiece[1],"  2:",player->holdingPiece[2]);
-        u8 temp[3];
-        for(u8 i=0;i<3;i++)temp[i]=player->fallingPiece[i];//temp and fallingpiece has falling, holding has hold
+        u8 temp[fallingPieceNumberOfTiles];
+        for(u8 i=0;i<fallingPieceNumberOfTiles;i++)temp[i]=player->fallingPiece[i];//temp and fallingpiece has falling, holding has hold
         //KLog_U3("TEMP - 0:",temp[0],"  1:",temp[1],"  2:",temp[2]);
-        for(u8 i=0;i<3;i++)player->fallingPiece[i]=player->holdingPiece[i];//temp has falling, falling and holding have hold
-        for(u8 i=0;i<3;i++)player->holdingPiece[i]=temp[i];
+        for(u8 i=0;i<fallingPieceNumberOfTiles;i++)player->fallingPiece[i]=player->holdingPiece[i];//temp has falling, falling and holding have hold
+        for(u8 i=0;i<fallingPieceNumberOfTiles;i++)player->holdingPiece[i]=temp[i];
         player->flag_currently_hold_swapping=false;
 
         //KLog_U3("after FALL - 0:",player->fallingPiece[0],"  1:",player->fallingPiece[1],"  2:",player->fallingPiece[2]);
         //KLog_U3("after HOLD - 0:",player->holdingPiece[0],"  1:",player->holdingPiece[1],"  2:",player->holdingPiece[2]);
 
-        for (u8 spriteIndex=0;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
+        //for (u8 spriteIndex=0;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
+        for (u8 spriteIndex=fallingPieceNumberOfTiles-player->optionPiecesDropping;spriteIndex<fallingPieceNumberOfTiles;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
     }
 
     player->xPosition=xSpawn;
@@ -643,76 +671,79 @@ void checkMatches(Player* player)
                     }
                 }
 
-                if(player->board[checkX][checkY]==player->board[checkX+1][checkY-1])//match diagonally up 2 tiles
+                if(player->optionDiagonalMatching==true)
                 {
-                    //KLog_U2("++init match - diagUP at ",checkX,",",checkY);
-                    connectionAmount=2;
-                    connectionColor=player->board[checkX][checkY];
-                    
-                    u8 incrementer=2;
-
-                    for (u8 advance=checkY-2;(advance>0 && ((checkX+incrementer)<(maxX+1)));advance--)
+                    if(player->board[checkX][checkY]==player->board[checkX+1][checkY-1])//match diagonally up 2 tiles
                     {
-                        if(player->board[checkX+incrementer][advance]==connectionColor)connectionAmount++;
-                        else if(player->board[checkX+incrementer][advance]!=connectionColor)break;
+                        //KLog_U2("++init match - diagUP at ",checkX,",",checkY);
+                        connectionAmount=2;
+                        connectionColor=player->board[checkX][checkY];
+                        
+                        u8 incrementer=2;
 
-                        incrementer++;
-                    }
+                        for (u8 advance=checkY-2;(advance>0 && ((checkX+incrementer)<(maxX+1)));advance--)
+                        {
+                            if(player->board[checkX+incrementer][advance]==connectionColor)connectionAmount++;
+                            else if(player->board[checkX+incrementer][advance]!=connectionColor)break;
+
+                            incrementer++;
+                        }
+                        
+                        if(connectionAmount>=player->optionNumConnections)
+                        {//KLog("***match - diagUp");
+                            for (u8 i=0;i<connectionAmount;i++)
+                            {
+                                if(matchedAlready[checkX+i][checkY-i]==false)
+                                {
+                                    player->matchedQueueX[player->howManyMatched]=checkX+i;
+                                    player->matchedQueueY[player->howManyMatched]=checkY-i;
+                                    player->howManyMatched++;
+                                    matchedAlready[checkX+i][checkY-i]=true;
+                                }
+
+                                //sprintf(debug_string,"diagUP %d,%d",checkX+i,checkY-i);
+                                //VDP_drawText(debug_string,13,19+i);
+                            }
+                            player->flag_status=blinkingMatches;//KLog("blinkingMatches");
+                        }
                     
-                    if(connectionAmount>=player->optionNumConnections)
-                    {//KLog("***match - diagUp");
-                        for (u8 i=0;i<connectionAmount;i++)
-                        {
-                            if(matchedAlready[checkX+i][checkY-i]==false)
-                            {
-                                player->matchedQueueX[player->howManyMatched]=checkX+i;
-                                player->matchedQueueY[player->howManyMatched]=checkY-i;
-                                player->howManyMatched++;
-                                matchedAlready[checkX+i][checkY-i]=true;
-                            }
-
-                            //sprintf(debug_string,"diagUP %d,%d",checkX+i,checkY-i);
-                            //VDP_drawText(debug_string,13,19+i);
-                        }
-                        player->flag_status=blinkingMatches;//KLog("blinkingMatches");
                     }
-                
-                }
 
-                if(player->board[checkX][checkY]==player->board[checkX+1][checkY+1])//match diagonally down 2 tiles
-                {
-                    //KLog_U2("++init match - diagDOWN at ",checkX,",",checkY);
-                    connectionAmount=2;
-                    connectionColor=player->board[checkX][checkY];
-
-                    u8 incrementer=2;
-
-                    for (u8 advance=checkY+2;(advance<maxY+1 && ((checkX+incrementer)<(maxX+1)));advance++)
+                    if(player->board[checkX][checkY]==player->board[checkX+1][checkY+1])//match diagonally down 2 tiles
                     {
-                        if(player->board[checkX+incrementer][advance]==connectionColor)connectionAmount++;
-                        else if(player->board[checkX+incrementer][advance]!=connectionColor)break;
+                        //KLog_U2("++init match - diagDOWN at ",checkX,",",checkY);
+                        connectionAmount=2;
+                        connectionColor=player->board[checkX][checkY];
 
-                        incrementer++;
-                    }
+                        u8 incrementer=2;
 
-                    if(connectionAmount>=player->optionNumConnections)
-                    {//KLog("***match - diagDown");
-                        for (u8 i=0;i<connectionAmount;i++)
+                        for (u8 advance=checkY+2;(advance<maxY+1 && ((checkX+incrementer)<(maxX+1)));advance++)
                         {
-                            if(matchedAlready[checkX+i][checkY+i]==false)
-                            {
-                                player->matchedQueueX[player->howManyMatched]=checkX+i;
-                                player->matchedQueueY[player->howManyMatched]=checkY+i;
-                                player->howManyMatched++;
-                                matchedAlready[checkX+i][checkY+i]=true;
-                            }
+                            if(player->board[checkX+incrementer][advance]==connectionColor)connectionAmount++;
+                            else if(player->board[checkX+incrementer][advance]!=connectionColor)break;
 
-                            //sprintf(debug_string,"diagDOWN %d,%d",checkX+i,checkY+i);
-                            //VDP_drawText(debug_string,13,19+i);
+                            incrementer++;
                         }
-                        player->flag_status=blinkingMatches;//KLog("blinkingMatches");
+
+                        if(connectionAmount>=player->optionNumConnections)
+                        {//KLog("***match - diagDown");
+                            for (u8 i=0;i<connectionAmount;i++)
+                            {
+                                if(matchedAlready[checkX+i][checkY+i]==false)
+                                {
+                                    player->matchedQueueX[player->howManyMatched]=checkX+i;
+                                    player->matchedQueueY[player->howManyMatched]=checkY+i;
+                                    player->howManyMatched++;
+                                    matchedAlready[checkX+i][checkY+i]=true;
+                                }
+
+                                //sprintf(debug_string,"diagDOWN %d,%d",checkX+i,checkY+i);
+                                //VDP_drawText(debug_string,13,19+i);
+                            }
+                            player->flag_status=blinkingMatches;//KLog("blinkingMatches");
+                        }
                     }
-                }
+                }//diagonal matching IF
             }
         }
     }
@@ -961,14 +992,15 @@ void handleInput(Player* player, u16 buttons)
     //HOLD with start button
         if((buttons & BUTTON_START) && player->releasedStart==true && player->optionStartButton==HOLD && player->flag_status==fallingPiece && player->flag_allowed_to_swap==true)
         {
-            if(player->holdingPiece[0]!=0)
+            if(player->holdingPiece[1]!=0)
             {
                 player->flag_currently_hold_swapping=true;
                 createPiece(player);
             }
-            if(player->holdingPiece[0]==0)
+            if(player->holdingPiece[1]==0)
             {
-                for(u8 i=0;i<3;i++)player->holdingPiece[i]=player->fallingPiece[i];//save current falling piece to hold area
+                //for(u8 i=0;i<3;i++)player->holdingPiece[i]=player->fallingPiece[i];//save current falling piece to hold area
+                for(u8 i=(fallingPieceNumberOfTiles-player->optionPiecesDropping);i<fallingPieceNumberOfTiles;i++)player->holdingPiece[i]=player->fallingPiece[i];//save current falling piece to hold area
                 createPiece(player);
             }
             
@@ -1092,6 +1124,8 @@ void startupOptionsMenu()
     #define optionsX 14
     #define optionsBaseY 0
 
+    #define numSelections 5
+
     s8 menuPosition=0;
     u16 optionsMenuButtons;
     bool releasedUpDownButton=true;
@@ -1111,7 +1145,10 @@ void startupOptionsMenu()
     P1.optionNumConnections=3;//default
     s8 connectionsSelection=1;
 
-    #define numSelections 4
+    P1.optionDiagonalMatching=true;//default
+
+    P1.optionPiecesDropping=3;//default
+
     #define counterMaxAmount 6
 
     while(1)
@@ -1159,14 +1196,14 @@ void startupOptionsMenu()
         }
         else if(menuPosition==1 && releasedLeftRight==true)
         {
-            if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P2.AIplayer==true)
+            if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P1.optionPiecesDropping==3)
             {
-                P2.AIplayer=false;
+                P1.optionPiecesDropping=2;
                 releasedLeftRight=false;
             }
-            else if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P2.AIplayer==false)
+            else if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P1.optionPiecesDropping==2)
             {
-                P2.AIplayer=true;
+                P1.optionPiecesDropping=3;
                 releasedLeftRight=false;
             }
         }
@@ -1209,6 +1246,32 @@ void startupOptionsMenu()
                 releasedLeftRight=false;
             }
         }
+        else if(menuPosition==5 && releasedLeftRight==true)
+        {
+            if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P1.optionDiagonalMatching==true)
+            {
+                P1.optionDiagonalMatching=false;
+                releasedLeftRight=false;
+            }
+            else if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P1.optionDiagonalMatching==false)
+            {
+                P1.optionDiagonalMatching=true;
+                releasedLeftRight=false;
+            }
+        }
+        else if(menuPosition==7 && releasedLeftRight==true)
+        {
+            if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P2.AIplayer==true)
+            {
+                P2.AIplayer=false;
+                releasedLeftRight=false;
+            }
+            else if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P2.AIplayer==false)
+            {
+                P2.AIplayer=true;
+                releasedLeftRight=false;
+            }
+        }
 
         if(dropSelection>2)dropSelection=0;
         else if(dropSelection<0)dropSelection=2;
@@ -1226,10 +1289,6 @@ void startupOptionsMenu()
 
         sprintf(debug_string,"Twelvish alpha");
         VDP_drawText(debug_string,optionsX-1,optionsBaseY+1);
-        //sprintf(debug_string,"options menu");
-        //VDP_drawText(debug_string,optionsX-0,optionsBaseY-0);
-        //sprintf(debug_string,"DPAD to change");
-        //VDP_drawText(debug_string,optionsX-1,optionsBaseY+2);
 
 //DROPPING option
         if(menuPosition!=0)
@@ -1273,28 +1332,6 @@ void startupOptionsMenu()
 
         VDP_drawText(debug_string,optionsX,optionsBaseY+6);
         P1.optionDropStyle=dropSelection;
-
-//CPU option
-        if(menuPosition!=1)
-        {
-            if(P2.AIplayer==true)sprintf(debug_string," CPU:[ON]");
-            else if(P2.AIplayer==false)sprintf(debug_string," CPU:[OFF]");
-        }
-        else if(menuPosition==1)
-        {
-            if(selectedArrowsToggleCounter==true)
-            {
-                if(P2.AIplayer==true)sprintf(debug_string,">CPU:[ON]");
-                else if(P2.AIplayer==false)sprintf(debug_string,">CPU:[OFF]");
-            }
-            else
-            {
-                if(P2.AIplayer==true)sprintf(debug_string," CPU:[ON]");
-                else if(P2.AIplayer==false)sprintf(debug_string," CPU:[OFF]");
-            }
-        }
-
-        VDP_drawText(debug_string,optionsX+1,optionsBaseY+8);
 
 //COLORS option
         if(menuPosition!=2)
@@ -1357,8 +1394,8 @@ void startupOptionsMenu()
             }  
         }
 
-    VDP_drawText(debug_string,optionsX-1,optionsBaseY+12);
-    P1.optionStartButton=startSelection;
+        VDP_drawText(debug_string,optionsX-1,optionsBaseY+12);
+        P1.optionStartButton=startSelection;
 
 //CONNECTIONS option
         if(menuPosition!=4)
@@ -1399,12 +1436,82 @@ void startupOptionsMenu()
             }  
         }
 
-    VDP_drawText(debug_string,optionsX-1,optionsBaseY+14);
-    P1.optionNumConnections=connectionsSelection+2;
+        VDP_drawText(debug_string,optionsX-1,optionsBaseY+14);
+        P1.optionNumConnections=connectionsSelection+2;
+
+//DIAGONALS option
+        if(menuPosition!=5)
+        {
+            if(P1.optionDiagonalMatching==true)sprintf(debug_string," DIAGS:[ON]");
+            else if(P1.optionDiagonalMatching==false)sprintf(debug_string," DIAGS:[OFF]");
+        }
+        else if(menuPosition==5)
+        {
+            if(selectedArrowsToggleCounter==true)
+            {
+                if(P1.optionDiagonalMatching==true)sprintf(debug_string,">DIAGS:[ON]");
+                else if(P1.optionDiagonalMatching==false)sprintf(debug_string,">DIAGS:[OFF]");
+            }
+            else
+            {
+                if(P1.optionDiagonalMatching==true)sprintf(debug_string," DIAGS:[ON]");
+                else if(P1.optionDiagonalMatching==false)sprintf(debug_string," DIAGS:[OFF]");
+            }
+        }
+
+        VDP_drawText(debug_string,optionsX-1,optionsBaseY+16);
+
+//PIECES option
+        if(menuPosition!=1)
+        {
+            if(P1.optionPiecesDropping==3)sprintf(debug_string," PIECES:[3]");
+            else if(P1.optionPiecesDropping==2)sprintf(debug_string," PIECES:[2]");
+        }
+        else if(menuPosition==1)
+        {
+            if(selectedArrowsToggleCounter==true)
+            {
+                if(P1.optionPiecesDropping==3)sprintf(debug_string,">PIECES:[3]");
+                else if(P1.optionPiecesDropping==2)sprintf(debug_string,">PIECES:[2]");
+            }
+            else
+            {
+                if(P1.optionPiecesDropping==3)sprintf(debug_string," PIECES:[3]");
+                else if(P1.optionPiecesDropping==2)sprintf(debug_string," PIECES:[2]");
+            }
+        }
+
+        VDP_drawText(debug_string,optionsX-2,optionsBaseY+8);
+
+//rotate is menu position 6
+        sprintf(debug_string,"ROTATE:[OFF]");
+        VDP_drawText(debug_string,optionsX-1,optionsBaseY+18);
+
+//CPU option
+        if(menuPosition!=7)
+        {
+            if(P2.AIplayer==true)sprintf(debug_string," CPU:[ON]");
+            else if(P2.AIplayer==false)sprintf(debug_string," CPU:[OFF]");
+        }
+        else if(menuPosition==7)
+        {
+            if(selectedArrowsToggleCounter==true)
+            {
+                if(P2.AIplayer==true)sprintf(debug_string,">CPU:[ON]");
+                else if(P2.AIplayer==false)sprintf(debug_string,">CPU:[OFF]");
+            }
+            else
+            {
+                if(P2.AIplayer==true)sprintf(debug_string," CPU:[ON]");
+                else if(P2.AIplayer==false)sprintf(debug_string," CPU:[OFF]");
+            }
+        }
+
+        VDP_drawText(debug_string,optionsX+1,optionsBaseY+20);
 
 //tell them to press start to leave
         sprintf(debug_string,"PRESS START");
-        VDP_drawText(debug_string,optionsX+0,optionsBaseY+23);  
+        VDP_drawText(debug_string,optionsX+0,optionsBaseY+24);  
     }
 }
 

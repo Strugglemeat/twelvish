@@ -175,6 +175,7 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     if(innerDrawingLowestY<3)innerDrawingLowestY=3;
 
 /*
+//maxX is 7
 //maxY is 17
     u8 innerDrawingHighestY=endY;
     if((innerDrawingHighestY & 1) == 0)innerDrawingHighestY++;
@@ -185,9 +186,12 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
 
     for(u8 innerConnectorColumn=innerDrawingHighestY;innerConnectorColumn>innerDrawingLowestY;innerConnectorColumn-=2)
 */
-    for(u8 innerConnectorColumn=maxY;innerConnectorColumn>innerDrawingLowestY;innerConnectorColumn-=2)
+    //u8 skipAmountEndX=2;
+
+    for(u8 innerConnectorColumn=maxY;innerConnectorColumn>=innerDrawingLowestY;innerConnectorColumn-=2)
     {
-        for(u8 innerConnectorRow=1;innerConnectorRow<maxX+1;innerConnectorRow+=2)
+        for(u8 innerConnectorRow=1;innerConnectorRow<=maxX;innerConnectorRow+=2)
+        //for(u8 innerConnectorRow=1;innerConnectorRow<=maxX-skipAmountEndX;innerConnectorRow+=2)
         {
             if(player->board[innerConnectorRow][innerConnectorColumn]!=0 || player->board[innerConnectorRow+1][innerConnectorColumn]!=0)
             {
@@ -206,6 +210,7 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
                 VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, innerSectionsVRAM+tileIncrementer+vramOffsetP2), xOffset+innerConnectorRow+(innerConnectorRow>>1)+1+p2offsetX, yOffset+innerConnectorColumn+(innerConnectorColumn>>1)-1, 1, 1);
             }
             tileIncrementer++;
+            //tileIncrementer+=skipAmountEndX;
         }
     }
     KLog_U1("tileIncrementer ended at ",tileIncrementer);//this is ending at 32 - shouldn't it be only 28?
