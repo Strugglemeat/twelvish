@@ -29,8 +29,9 @@ typedef struct {
 //input
     u8 moveDelay;
     u8 cycleDelay;
-    bool has_released_cycle;
-    bool releasedStart;
+    bool flag_releasedCycle;
+    bool flag_releasedStart;
+    bool flag_releasedUp;
 
 //drawing
     u8 drawStartX,drawStartY,drawEndX,drawEndY;
@@ -71,7 +72,6 @@ typedef struct {
 
 //HOLD & SWAP
     u8 holdingPiece[fallingPieceNumberOfTiles];//for the start button HOLD function
-    bool flag_currently_hold_swapping;
     bool flag_allowed_to_swap;
 
     s16 numTimesSpawned;
@@ -385,8 +385,11 @@ void initialize()
     P1.fallingIncrement=0;
     P2.fallingIncrement=0;
 
-    P1.has_released_cycle=true;
-    P2.has_released_cycle=true;
+    P1.flag_releasedCycle=true;
+    P2.flag_releasedCycle=true;
+
+    P1.flag_releasedUp=true;
+    P2.flag_releasedUp=true;
 
     P1.blinkTimes=0;
     P2.blinkTimes=0;
@@ -570,7 +573,6 @@ void swapPiece(Player* player)
     //KLog_U3("TEMP - 0:",temp[0],"  1:",temp[1],"  2:",temp[2]);
     for(u8 i=0;i<fallingPieceNumberOfTiles;i++)player->fallingPiece[i]=player->holdingPiece[i];//temp has falling, falling and holding have hold
     for(u8 i=0;i<fallingPieceNumberOfTiles;i++)player->holdingPiece[i]=temp[i];
-    player->flag_currently_hold_swapping=false;
 
     //KLog_U3("after FALL - 0:",player->fallingPiece[0],"  1:",player->fallingPiece[1],"  2:",player->fallingPiece[2]);
     //KLog_U3("after HOLD - 0:",player->holdingPiece[0],"  1:",player->holdingPiece[1],"  2:",player->holdingPiece[2]);
@@ -580,12 +582,7 @@ void swapPiece(Player* player)
 
 void processSpawn(Player* player)
 {
-//set up next piece
-    /*
-    if(player->flag_currently_hold_swapping==false)generatePiece(player);
-    else if(player->flag_currently_hold_swapping==true)swapPiece(player);
-    */
-    if(player->flag_currently_hold_swapping==true)swapPiece(player);
+    generatePiece(player);//moved from pieceIntoBoard because there was too much lag between landing and chain finish, player can't know what they have next
 
 //set X and Y positions
 //sprite
@@ -844,22 +841,24 @@ void pieceIntoBoard(Player* player)
     player->board[player->xPosition][player->yPosition-1]=player->fallingPiece[1];
     player->board[player->xPosition][player->yPosition-2]=player->fallingPiece[0];
 
+/*move this to somewhere else, let them set a piece into the top-out place and try for a match
     if(player->board[4][1]!=0 || player->yPosition<=2)//check for top-out
     {
         player->flag_status=toppedOut;
         return;
     }
+*/
 
-    SPR_setPosition(player->fallingPieceSprite[0],-32,0);//move the sprites away
-    SPR_setPosition(player->fallingPieceSprite[1],-32,0);
-    SPR_setPosition(player->fallingPieceSprite[2],-32,0);
-
-    KLog_U1("^^pieceIntoBoard updated the draw parameters for P",player->playerNum);
+    //KLog_U1("^^pieceIntoBoard updated the draw parameters for P",player->playerNum);
     player->drawStartX=player->xPosition;
     player->drawStartY=player->yPosition-2;
     player->drawEndX=player->xPosition+1;
     player->drawEndY=player->yPosition+1;
     //the above are solid and should stay as-is - other updates to the drawing coordinates should come from other functions
+
+    SPR_setPosition(player->fallingPieceSprite[0],-12,spriteYorigin);//move the sprites away
+    SPR_setPosition(player->fallingPieceSprite[1],-12,spriteYorigin-12);
+    SPR_setPosition(player->fallingPieceSprite[2],-12,spriteYorigin-24);
 
     player->flag_redraw=true;
 
@@ -867,7 +866,7 @@ void pieceIntoBoard(Player* player)
 
     player->flag_allowed_to_swap=true;
 
-    generatePiece(player);
+    //generatePiece(player);
 
     player->flag_status=checkingMatches;
 }
@@ -896,7 +895,7 @@ void processGravity(Player* player)
 
     if(howMuchGravity>0)
     {
-        KLog_U2("^^processGravity updated drawStartY, from ",player->drawStartY," to ",player->drawStartY-1);
+        if(player==&P1)KLog_U2("^^processGravity updated drawStartY, from ",player->drawStartY," to ",player->drawStartY-1);
         player->drawStartY--;
 
         player->flag_redraw=true;
@@ -906,8 +905,18 @@ void processGravity(Player* player)
     }
     else if(howMuchGravity==0)
     {
-        //KLog("processGravity: ZERO GRAVITY TO PROCESS");
-        player->flag_status=spawningPiece;
+        //lets check for top-out here?
+
+        if(player->board[4][1]!=0 || player->yPosition<=2)//check for top-out
+        {
+            player->flag_status=toppedOut;
+            return;
+        }
+        else 
+        {
+            player->flag_status=spawningPiece;
+            //KLog("processGravity: ZERO GRAVITY TO PROCESS");
+        }
     }
 
 }
@@ -926,6 +935,7 @@ void manageDelays()
 void handleInput(Player* player, u16 buttons)
 {
     //KLog("handleinput started");
+//LEFT RIGHT
     if(player->moveDelay==0 && player->yPosition>ySpawn)//ySpawn=0
     {
         if(buttons & BUTTON_LEFT && collisionTest(player, LEFT)==FALSE)
@@ -946,6 +956,7 @@ void handleInput(Player* player, u16 buttons)
         }
     }
 
+//DOWN
     if(collisionTest(player, BOTTOM)==FALSE)
     {
         if (buttons & BUTTON_DOWN)
@@ -959,65 +970,74 @@ void handleInput(Player* player, u16 buttons)
             }
         }
 
-        if (buttons & BUTTON_UP && player->moveDelay<=1 && player->optionDropStyle>0)
+//UP
+        if (buttons & BUTTON_UP && player->moveDelay<=1 && player->optionDropStyle>0 && player->flag_releasedUp==true)
         {
+            /*
             if(player->optionDropStyle==SONIC)effectFastDrop(player);
             else if(player->yPosition>0)effectFastDrop(player);//slight delay for HARD DROP
+            */
+            effectFastDrop(player);
+            player->flag_releasedUp=false;
         }
+        else if (!(buttons & BUTTON_UP))player->flag_releasedUp=true;
     }
-    else if((collisionTest(player, BOTTOM)==TRUE) && (buttons & BUTTON_DOWN))player->lockingLateralCounter=maxLaterals;//lock in
+    else if((collisionTest(player, BOTTOM)==TRUE) && (buttons & BUTTON_DOWN))
+    {
+        player->lockingLateralCounter=maxLaterals;//lock in
+    }
 
-    if(!(buttons & BUTTON_C) && !(buttons & BUTTON_B))player->has_released_cycle=true;
+//B and C (cycling)
+    if(!(buttons & BUTTON_C) && !(buttons & BUTTON_B))player->flag_releasedCycle=true;
 
-    if(player->cycleDelay==0 && player->has_released_cycle==true)
+    if(player->cycleDelay==0 && player->flag_releasedCycle==true)
     {
         if (buttons & BUTTON_C)
         {
             doCycle(player, DOWN);
             player->cycleDelay=CYCLE_DELAY_AMOUNT;
-            player->has_released_cycle=false;
+            player->flag_releasedCycle=false;
 
         }
         else if (buttons & BUTTON_B)
         {
             doCycle(player, UP);
             player->cycleDelay=CYCLE_DELAY_AMOUNT;
-            player->has_released_cycle=false;
+            player->flag_releasedCycle=false;
         }
     }
 
     if(player->optionStartButton>0)
     {
-    //DISCARD-SKIP with start button
-        if((buttons & BUTTON_START) && player->releasedStart==true && player->optionStartButton==SKIP && player->flag_allowed_to_swap==true)
+//DISCARD-SKIP with start button
+        if((buttons & BUTTON_START) && player->flag_releasedStart==true && player->optionStartButton==SKIP && player->flag_allowed_to_swap==true)
         {
             processSpawn(player);
-            player->releasedStart=false;
+            player->flag_releasedStart=false;
             player->flag_allowed_to_swap=false;
         }
 
-    //HOLD with start button
-        if((buttons & BUTTON_START) && player->releasedStart==true && player->optionStartButton==HOLD && player->flag_status==fallingPiece && player->flag_allowed_to_swap==true)
+//HOLD with start button
+        if((buttons & BUTTON_START) && player->flag_releasedStart==true && player->optionStartButton==HOLD && player->flag_status==fallingPiece && player->flag_allowed_to_swap==true)
         {
             if(player->holdingPiece[1]!=0)//if we have a piece saved
             {
-                player->flag_currently_hold_swapping=true;
+                swapPiece(player);
                 processSpawn(player);
             }
             else if(player->holdingPiece[1]==0)//if we don't have a piece saved
             {
-                //for(u8 i=0;i<3;i++)player->holdingPiece[i]=player->fallingPiece[i];//save current falling piece to hold area
-                for(u8 i=(fallingPieceNumberOfTiles-player->optionPiecesDropping);i<fallingPieceNumberOfTiles;i++)player->holdingPiece[i]=player->fallingPiece[i];//save current falling piece to hold area
+                for(u8 i=(fallingPieceNumberOfTiles-player->optionPiecesDropping);i<fallingPieceNumberOfTiles;i++)player->holdingPiece[i]=player->fallingPiece[i];//save current falling piece to hold area //for(u8 i=0;i<3;i++)player->holdingPiece[i]=player->fallingPiece[i];//save current falling piece to hold area
                 generatePiece(player);
                 processSpawn(player);
             }
             
-            player->releasedStart=false;
+            player->flag_releasedStart=false;
             player->flag_allowed_to_swap=false;
         }
 
-    //reset START button held
-        if(!(buttons & BUTTON_START) && player->releasedStart==false)player->releasedStart=true;
+//reset START button held
+        if(!(buttons & BUTTON_START) && player->flag_releasedStart==false)player->flag_releasedStart=true;
     }
 }
 
@@ -1037,11 +1057,12 @@ void gameLogicSwitch(Player* player)
             break;
 
         case checkingMatches:
-            KLog("$checkingMatches");
+            //KLog("$checkingMatches");
             checkMatches(player);
             break;
 
         case blinkingMatches:
+            //if(player==&P1)KLog("***blinkMatches just started (P1)");
             blinkMatches(player);
             break;
 
@@ -1065,8 +1086,7 @@ void printDebug()
     strcat(debug_string, "CPU");
     VDP_drawText(debug_string,21,27);
 
-    //if(SYS_getCPULoad()>100)KLog("CPU usage over 100%");
-    if(SYS_getCPULoad()>90)KLog_U2("CPU usage over 90%, P1 status: ",P1.flag_status," P2 status: ",P2.flag_status);
+    if(SYS_getCPULoad()>90)KLog_U2("CPU>90%, P1 status: ",P1.flag_status," P2 status: ",P2.flag_status);
 
     if(P1.flag_status==toppedOut)
     {
@@ -1139,23 +1159,29 @@ void startupOptionsMenu()
     bool releasedUpDownButton=true;
     bool releasedLeftRight=true;
 
-    P2.AIplayer=true;//default
-    P1.optionDropStyle=SONIC;//default
-    s8 dropSelection=1;
-
-    P1.optionStartButton=SKIP;//default
-    s8 startSelection=1;
-
     bool selectedArrowsToggle=true;
     u8 selectedArrowsToggleCounter=0;
-    P1.optionNumColors=5;//turn this option to 5 by default
 
-    P1.optionNumConnections=3;//default
-    s8 connectionsSelection=1;
+    P2.AIplayer=true;//default
 
-    P1.optionDiagonalMatching=true;//default
+    s8 dropSelection;
+    P1.optionDropStyle=HARD;//default
+    if(P1.optionDropStyle==SONIC)dropSelection=1;
+    else if(P1.optionDropStyle==HARD)dropSelection=2;
 
-    P1.optionPiecesDropping=3;//default
+    P1.optionStartButton=SKIP;//default SKIP
+    s8 startSelection=1;
+
+    P1.optionNumColors=5;//default 5
+
+    s8 connectionsSelection;
+    P1.optionNumConnections=4;//default should be 3
+    if(P1.optionNumConnections==3)connectionsSelection=1;
+    else if(P1.optionNumConnections==4)connectionsSelection=2;
+
+    P1.optionDiagonalMatching=false;//default should be TRUE
+
+    P1.optionPiecesDropping=3;//default should be 3
 
     #define counterMaxAmount 6
 
@@ -1627,19 +1653,19 @@ void processAI()
         }
 
 //cycling
-        if(P2.cycleDelay==0 && P2.has_released_cycle==true)
+        if(P2.cycleDelay==0 && P2.flag_releasedCycle==true)
         {
-            if(P1.has_released_cycle==false || P1.moveDelay==MOVE_DELAY_AMOUNT || P1.flag_status==spawningPiece)
+            if(P1.flag_releasedCycle==false || P1.moveDelay==MOVE_DELAY_AMOUNT || P1.flag_status==spawningPiece)
             {
                 doCycle(&P2, DOWN);
                 P2.cycleDelay=CYCLE_DELAY_AMOUNT;
-                P2.has_released_cycle=false;
+                P2.flag_releasedCycle=false;
             }
             if(P2.yPosition==4 || P2.yPosition==10)
             {
                 doCycle(&P2, UP);
                 P2.cycleDelay=CYCLE_DELAY_AMOUNT;
-                P2.has_released_cycle=false;               
+                P2.flag_releasedCycle=false;               
             }
         }
     }
@@ -1721,7 +1747,7 @@ void blinkMatches(Player* player)
     //KLog("$^^blinkMatches!!!");
     if(player->blinkTimes==0)//initialization
     {
-        KLog("^^blinkmatches set draw parameters to FULL BOARD");
+        //KLog("^^blinkmatches set draw parameters to FULL BOARD");
         player->drawStartX=maxX;
         player->drawEndX=1;
         player->drawStartY=maxY;
@@ -1736,33 +1762,40 @@ void blinkMatches(Player* player)
             if(player->matchedQueueX[i]<player->drawStartX)
                 {
                     player->drawStartX=player->matchedQueueX[i];
-                    KLog_U1("^^drawStartX updated to: ",player->drawStartX);
+                    //KLog_U1("^^drawStartX updated to: ",player->drawStartX);
                 }
             if(player->matchedQueueX[i]>player->drawEndX)
                 {
                     player->drawEndX=player->matchedQueueX[i];
-                    KLog_U1("^^drawEndX updated to: ",player->drawEndX);
+                    //KLog_U1("^^drawEndX updated to: ",player->drawEndX);
                 }
             if(player->matchedQueueY[i]<player->drawStartY)
                 {
                     player->drawStartY=player->matchedQueueY[i];
-                    KLog_U1("^^drawStartY updated to: ",player->drawStartY);
+                    //KLog_U1("^^drawStartY updated to: ",player->drawStartY);
                 }
             if(player->matchedQueueY[i]>player->drawEndY)
                 {
                     player->drawEndY=player->matchedQueueY[i];
-                    KLog_U1("^^drawEndY updated to: ",player->drawEndY);
+                    //KLog_U1("^^drawEndY updated to: ",player->drawEndY);
                 }
             
 //save the cleared pieces to blinkingSave array
                 player->blinkingSave[player->matchedQueueX[i]][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
         }
     
-        player->drawStartX--;KLog_U2("manual update of drawStartX from ",player->drawStartX+1," to ",player->drawStartX);
-        player->drawEndX++;KLog_U2("manual update of drawEndX from ",player->drawEndX-1," to ",player->drawEndX);
-        player->drawStartY--;KLog_U2("manual update of drawStartY from ",player->drawStartY+1," to ",player->drawStartY);
-        player->drawEndY++;KLog_U2("manual update of drawEndY from ",player->drawEndY-1," to ",player->drawEndY);
+        player->drawStartX--;
+        //if(player==&P1)KLog_U2("manual update of P1 drawStartX from ",player->drawStartX+1," to ",player->drawStartX);
         
+        player->drawEndX++;
+        //if(player==&P1)KLog_U2("manual update of P1 drawEndX from ",player->drawEndX-1," to ",player->drawEndX);
+    
+        player->drawStartY--;
+        //if(player==&P1)KLog_U2("manual update of P1 drawStartY from ",player->drawStartY+1," to ",player->drawStartY);
+    
+        player->drawEndY++;
+        //if(player==&P1)KLog_U2("manual update of P1 drawEndY from ",player->drawEndY-1," to ",player->drawEndY);
+    
         player->blinkTimes++;
     }
 
@@ -1786,7 +1819,7 @@ void blinkMatches(Player* player)
             }    
         }
 
-        KLog_U4("^^blink drawing ",player->drawStartX,",",player->drawEndX," | ",player->drawStartY,",",player->drawEndY);
+        //KLog_U4("^^blink drawing ",player->drawStartX,",",player->drawEndX," | ",player->drawStartY,",",player->drawEndY);
         player->flag_redraw=true;
         return;
     }
@@ -1809,7 +1842,7 @@ void blinkMatches(Player* player)
 
 void processDestroy(Player* player)//we ONLY get here if we are destroying tiles
 {
-    KLog("processDestroy just started");
+    if(player==&P1)KLog("********P1 processDestroy just started");
     player->chainAmount++;
 
     for (u8 i=0;i<player->howManyMatched;i++)

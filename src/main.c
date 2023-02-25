@@ -83,18 +83,23 @@ int main()
 
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from left to right, from top to bottom
 {
-    KLog_U4("printBoard: from X ",startX," to X ",endX,"    from Y ",startY," to Y ",endY);
-
     if(startX==0)
     {
        startX=1;
-       KLog("printBoard: fixed StartX at zero");//OPTIMIZE - at source, don't permit 0
+       player->drawStartX=1;
+       if(player==&P1)KLog("printBoard: fixed StartX at zero (P1)");//OPTIMIZE - at source, don't permit 0
     }
         
     if(startY==0)
     {
         startY=1;
-        KLog("printBoard: fixed StartY at zero");//OPTIMIZE - at source, don't permit 0
+        player->drawStartY=1;
+        if(player==&P1)KLog("printBoard: fixed StartY at zero (P1)");//OPTIMIZE - at source, don't permit 0
+    }
+
+    if(player==&P1 && (((endX-startX)>4) || ((endY-startY)>4)))
+    {
+        KLog_U4("[P1] printBoard: from X ",startX," to X ",endX,"    from Y ",startY," to Y ",endY);
     }
 
     for(u8 xDraw=startX;xDraw<endX;xDraw++)
@@ -161,56 +166,71 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
 //currently we are calculating and drawing all 32 every time each person draws anywhere on the field
 
     u32 tile[8];
-
-    u8 tileIncrementer=0;
     u8 UpperHalfFlag;
-
+    u8 tileIncrementer=0;
     u8 vramOffsetP2=0;
     if(player==&P2)vramOffsetP2=32;
 
+//lowest Y - when do we stop in Y after starting from the very bottom
     s8 innerDrawingLowestY=startY;
     if((innerDrawingLowestY & 1) == 0)innerDrawingLowestY--;
-    else innerDrawingLowestY-=2;
-    if(innerDrawingLowestY<3)innerDrawingLowestY=3;
+    //innerDrawingLowestY--;
+
+
+
+//ending Y (highest number - furthest down the field)
+    u8 innerDrawingHighestY=endY;
+    if((innerDrawingHighestY & 1) == 0)innerDrawingHighestY--;
+
+    //if(player==&P1)KLog_U4("startY:",startY,", innerDrawingLowestY: ",innerDrawingLowestY,", endY:",endY,", innerDrawingHighestY:",innerDrawingHighestY);
 
 /*
-//maxX is 7
-//maxY is 17
-    u8 innerDrawingHighestY=endY;
-    if((innerDrawingHighestY & 1) == 0)innerDrawingHighestY++;
-    else innerDrawingHighestY+=2;
-    if(innerDrawingHighestY>maxY)innerDrawingHighestY=maxY;
-    //we need to add to tileIncrementer here
-    tileIncrementer+=maxY-endY;//innerDrawingHighestY;
+//starting X
+    s8 innerDrawingStartX=player->drawStartX;
+    if((innerDrawingStartX & 1) == 0)innerDrawingStartX--;//if it's even    2->1      4->3       6->5
 
-    for(u8 innerConnectorColumn=innerDrawingHighestY;innerConnectorColumn>innerDrawingLowestY;innerConnectorColumn-=2)
+//ending X
+    s8 innerDrawingEndX=player->drawEndX;
+    if((innerDrawingEndX & 1) == 0)innerDrawingEndX--;
 */
-    //u8 skipAmountEndX=2;
+    //tileIncrementer=innerDrawingStartX;
+    //tileIncrementer=(innerDrawingStartX-1)<<2;
 
-    for(u8 innerConnectorColumn=maxY;innerConnectorColumn>=innerDrawingLowestY;innerConnectorColumn-=2)
+    tileIncrementer+=(maxY-innerDrawingHighestY)*2;
+    if(player==&P1)KLog_U1("[]starting tileIncrementer at ",tileIncrementer);
+
+    //if(player==&P1)KLog_U1("about to start from bottom to top, 17 to ",innerDrawingLowestY);
+    //for(u8 innerConnectorColumn=maxY;innerConnectorColumn>=innerDrawingLowestY;innerConnectorColumn-=2)
+    if(player==&P1)KLog_U2("about to start from bottom to top, ",innerDrawingHighestY," to ",innerDrawingLowestY);
+    for(u8 innerConnectorColumn=innerDrawingHighestY;innerConnectorColumn>=innerDrawingLowestY;innerConnectorColumn-=2)
     {
-        for(u8 innerConnectorRow=1;innerConnectorRow<=maxX;innerConnectorRow+=2)
-        //for(u8 innerConnectorRow=1;innerConnectorRow<=maxX-skipAmountEndX;innerConnectorRow+=2)
+        for(u8 innerConnectorRow=1;innerConnectorRow<=maxX;innerConnectorRow+=2)//raw and full
+        //for(u8 innerConnectorRow=innerDrawingStartX;innerConnectorRow<=innerDrawingEndX;innerConnectorRow+=2)//this happens a max of 4 times per loop
         {
-            if(player->board[innerConnectorRow][innerConnectorColumn]!=0 || player->board[innerConnectorRow+1][innerConnectorColumn]!=0)
+            for (u8 section=0;section<=4;section+=4)
             {
-                for (u8 section=0;section<=4;section+=4)
+                for (u8 yDraw=0;yDraw<4;yDraw++)
                 {
-                    for (u8 yDraw=0;yDraw<4;yDraw++)
-                    {
-                        if(section<=2)UpperHalfFlag=1;//upper half
-                        else UpperHalfFlag=0;//lower half
+                    if(section<=2)UpperHalfFlag=1;//upper half
+                    else UpperHalfFlag=0;//lower half
 
-                        tile[yDraw+section]=(innerConnectorLUT(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag])<<16)+innerConnectorLUT(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]);
-                    }
+                    tile[yDraw+section]=(innerConnectorLUT(player->board[innerConnectorRow][innerConnectorColumn-UpperHalfFlag])<<16)+innerConnectorLUT(player->board[innerConnectorRow+1][innerConnectorColumn-UpperHalfFlag]);
                 }
-                
-                VDP_loadTileData(tile, innerSectionsVRAM+tileIncrementer+vramOffsetP2, 1, CPU);//VDP_loadTileData (const u32 *data, u16 index, u16 num, TransferMethod tm)
-                VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, innerSectionsVRAM+tileIncrementer+vramOffsetP2), xOffset+innerConnectorRow+(innerConnectorRow>>1)+1+p2offsetX, yOffset+innerConnectorColumn+(innerConnectorColumn>>1)-1, 1, 1);
             }
-            tileIncrementer++;
-            //tileIncrementer+=skipAmountEndX;
+            
+            VDP_loadTileData(tile, innerSectionsVRAM+tileIncrementer+vramOffsetP2, 1, CPU);//VDP_loadTileData (const u32 *data, u16 index, u16 num, TransferMethod tm)
+            VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, innerSectionsVRAM+tileIncrementer+vramOffsetP2), xOffset+innerConnectorRow+(innerConnectorRow>>1)+1+p2offsetX, yOffset+innerConnectorColumn+(innerConnectorColumn>>1)-1, 1, 1);
+        
+            tileIncrementer++;//4 times per row
         }
+
+        if(player==&P1)KLog_U1("finished a Y loop, tileIncrementer is: ",tileIncrementer);
+
     }
-    KLog_U1("tileIncrementer ended at ",tileIncrementer);//this is ending at 32 - shouldn't it be only 28?
+    if(player==&P1)
+    {
+        if(tileIncrementer<32)KLog_U1("~~tileIncrementer ended at ",tileIncrementer);
+        else if(tileIncrementer>32)KLog_U1("!!TOO HIGH!! tileIncrementer ended at ",tileIncrementer);
+    }
+        
 }
