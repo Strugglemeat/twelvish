@@ -777,7 +777,15 @@ void checkMatches(Player* player)
             }
         }
     }
-    if(player->flag_status!=blinkingMatches)player->flag_status=spawningPiece;//there were no connections
+    if(player->flag_status!=blinkingMatches)//there were no connections
+    {
+        if(player->board[4][1]!=0 || player->yPosition<=2)//check for top-out
+        {
+            player->flag_status=toppedOut;
+            return;
+        }
+        else player->flag_status=spawningPiece;
+    }
     //if(player==&P1)KLog_U1("()()()howManyMatched: ",player->howManyMatched);
 }
 
@@ -905,18 +913,8 @@ void processGravity(Player* player)
     }
     else if(howMuchGravity==0)
     {
-        //lets check for top-out here?
-
-        if(player->board[4][1]!=0 || player->yPosition<=2)//check for top-out
-        {
-            player->flag_status=toppedOut;
-            return;
-        }
-        else 
-        {
-            player->flag_status=spawningPiece;
-            //KLog("processGravity: ZERO GRAVITY TO PROCESS");
-        }
+        player->flag_status=spawningPiece;
+        //KLog("processGravity: ZERO GRAVITY TO PROCESS");
     }
 
 }
@@ -971,7 +969,8 @@ void handleInput(Player* player, u16 buttons)
         }
 
 //UP
-        if (buttons & BUTTON_UP && player->moveDelay<=1 && player->optionDropStyle>0 && player->flag_releasedUp==true)
+        //if (buttons & BUTTON_UP && player->moveDelay<=1 && player->optionDropStyle>0 && player->flag_releasedUp==true)
+        if (buttons & BUTTON_UP && player->optionDropStyle>0 && player->flag_releasedUp==true)
         {
             /*
             if(player->optionDropStyle==SONIC)effectFastDrop(player);
@@ -1164,8 +1163,8 @@ void startupOptionsMenu()
 
     P2.AIplayer=true;//default
 
-    s8 dropSelection;
     P1.optionDropStyle=HARD;//default
+    s8 dropSelection;
     if(P1.optionDropStyle==SONIC)dropSelection=1;
     else if(P1.optionDropStyle==HARD)dropSelection=2;
 
@@ -1175,11 +1174,11 @@ void startupOptionsMenu()
     P1.optionNumColors=5;//default 5
 
     s8 connectionsSelection;
-    P1.optionNumConnections=4;//default should be 3
+    P1.optionNumConnections=3;//default should be 3
     if(P1.optionNumConnections==3)connectionsSelection=1;
     else if(P1.optionNumConnections==4)connectionsSelection=2;
 
-    P1.optionDiagonalMatching=false;//default should be TRUE
+    P1.optionDiagonalMatching=true;//default should be TRUE
 
     P1.optionPiecesDropping=3;//default should be 3
 
@@ -1741,8 +1740,8 @@ u16 innerConnectorLUT(u16 section)
 
 void blinkMatches(Player* player)
 {
-    #define blinkingTimeAmt 6000
-    #define blinkNumOfTimes 8
+    #define blinkingTimeAmt 5000//4000 - 6000 - 10000
+    #define blinkNumOfTimes 8//10 - 8 - 6
 
     //KLog("$^^blinkMatches!!!");
     if(player->blinkTimes==0)//initialization
