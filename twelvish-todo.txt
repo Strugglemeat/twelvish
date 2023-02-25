@@ -1,34 +1,33 @@
-do not draw all inner sections every time! optimize this
-*add limit to the furthest X (endX)
-*do an addition to tileIncrementer based on how much is gone
-for example if endX=8, tileIncremeter no additional add
-if endX=6,tileIncrementer +2 (AFTER EACH X LOOP) - to get it back to where it should be
-========
+BUG: some sort of phantom matching at least at ground lvl when in 2match
+======
 use a different 5 colors for each player
 ======
 check for ALL CLEAR        P1.flag_allClear
 =========
-implement hori/vert rotation
+implement hori rotation
+*manageFalling
+*pieceIntoBoard
+*handleInput
+
+use a LUT to determine the offsets of collisionTest
+if player->flag_flippedHorizontal==false, offsets are as now
+if player->flag_flippedHorizontal==true, offsets are all changed
 ========
-combo and chain display needs to be restricted, not running every frame in vblank
+controls: fast drop and having more than 1 spell slot are mutually exclusive
 =======
 re-implement garbage system (press A button to send)
 *ai sends garbage
 =========
+VS stuff:
+option set: ATK 1 thru 3 (stars), DEF 1 thru 3 stars
+using bit shifting, give chrs ~75%/100%/~125% attack (how many garbage sent) and defense (how much garbage received)
+============
 set up pal3 to use 3 colors per tile type
 inner uses colors A & B, while updown, leftright, and 4piece corner all use colors C
 gray garbage moved to background palette, use colors from there
 ========
 drawing parameters should be completely reset when clearing - don't inherit them from piecelocked!
 =========
-logic should be
-piecelocking->check for matches->if destroying, blinking (draw)->destroy->draw->check for gravity
-right now we're not drawing between destroying and gravity
-
-parameters of what to draw should be set in blinking first and gravity second
-
-destroying should just be simple removal and update based on prior parameters
-======
 piece preview 'TLS' using miniature indicators ala puyo puyo esports
 ~~~~~~~~~~~~
 damage incoming indicator below player playfield (at the very bottom)
@@ -53,6 +52,6 @@ SP modes
 
 MP modes
 *CLASSIC: each player picks their own character and spell(s) (cost restrictions on spells)
-*MIRROR: both players always get the same loadout. first round, 2p picks char+spell. after that, loser picks char+spell
+*MIRROR: both players always get the same loadout. first round, random char+spell. after that, loser picks char+spell
 *FREE: prior to the match, players choose any attributes and 1 spell (no cost restrictions on spells)
 *PEACE: each player plays endless mode ala Pnickies

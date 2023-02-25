@@ -47,11 +47,12 @@ TRAITS:
 *hard drop
 *only 4 colors (but nerf damage given)
 *extra spell slot
-*can't cycle, only rotate
-*can't rotate, only cycle
-*can't rotate or cycle
 *hold piece
 *skip piece
 *2 colors to match
 *4 colors to match
+*no diagonal matching
 *drops 2 pieces not 3
+*can't cycle, only rotate
+*can't rotate, only cycle
+*can't rotate or cycle
