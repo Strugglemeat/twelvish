@@ -174,17 +174,15 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     s8 debug_actualDrawnTiles=0;
 
 //lowest Y - when do we stop in Y after starting from the very bottom
-    s8 innerDrawingLowestY=startY;
-    if((innerDrawingLowestY & 1) == 0)innerDrawingLowestY--;
+    //s8 innerDrawingLowestY=startY;
+    //if((innerDrawingLowestY & 1) == 0)innerDrawingLowestY--;
     //innerDrawingLowestY--;
-
 
 //ending Y (highest number - furthest down the field)
     u8 innerDrawingHighestY=endY;
     if((innerDrawingHighestY & 1) == 0)innerDrawingHighestY--;
 
     //if(player==&P1)KLog_U4("startY:",startY,", innerDrawingLowestY: ",innerDrawingLowestY,", endY:",endY,", innerDrawingHighestY:",innerDrawingHighestY);
-
 
 //starting X
     s8 innerDrawingStartX=player->drawStartX;
@@ -198,22 +196,13 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     //if(player==&P1 && tileIncrementer>0)KLog_U1("Starting tileIncrementer at ",tileIncrementer);
 
     //if(player==&P1)KLog_U2("about to start from bottom to top, ",innerDrawingHighestY," to ",innerDrawingLowestY);
-    for(u8 innerConnectorColumn=innerDrawingHighestY;innerConnectorColumn>=innerDrawingLowestY;innerConnectorColumn-=2)
+    //for(u8 innerConnectorColumn=innerDrawingHighestY;innerConnectorColumn>=innerDrawingLowestY;innerConnectorColumn-=2)
+    for(u8 innerConnectorColumn=innerDrawingHighestY;innerConnectorColumn>=startY;innerConnectorColumn-=2)
     {
-
-        /*
-        if(innerDrawingStartX==1)tileIncrementer+=0;
-        else if(innerDrawingStartX==3)tileIncrementer+=1;
-        else if(innerDrawingStartX==5)tileIncrementer+=2;
-        else if(innerDrawingStartX==7)tileIncrementer+=3;
-        */
         tileIncrementer+=(innerDrawingStartX>>1);
 
-        //for(u8 innerConnectorRow=1;innerConnectorRow<=maxX;innerConnectorRow+=2)//raw and full
         //if(player==&P1)KLog_U2("about to start from left to right, ",innerDrawingStartX," to ",innerDrawingEndX);
         for(u8 innerConnectorRow=innerDrawingStartX;innerConnectorRow<=innerDrawingEndX;innerConnectorRow+=2)//this happens a max of 4 times per loop
-        //if(player==&P1)KLog_U1("about to start from left at ",innerDrawingStartX);
-        //for(u8 innerConnectorRow=innerDrawingStartX;innerConnectorRow<=maxX;innerConnectorRow+=2)
         {
             if(player->board[innerConnectorRow][innerConnectorColumn]!=0 || player->board[innerConnectorRow+1][innerConnectorColumn]!=0)
             {
@@ -236,12 +225,6 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
             tileIncrementer++;//4 times per row
             //if(player==&P1)KLog_U2("done X loop, tileIncrementer is: ",tileIncrementer,", yPos:",innerConnectorColumn);
         }
-/*
-        if(innerDrawingEndX==7)tileIncrementer+=0;
-        else if(innerDrawingEndX==5)tileIncrementer+=1;
-        else if(innerDrawingEndX==3)tileIncrementer+=2;
-        else if(innerDrawingEndX==1)tileIncrementer+=3;
-*/
         tileIncrementer+=((7-innerDrawingEndX)>>1);
 
         //if(player==&P1 && tileIncrementer<32)KLog_U1("finished Y loop, tileIncrementer is: ",tileIncrementer);
@@ -249,5 +232,5 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
         if(tileIncrementer>=32)return;
     }
 
-    if(player==&P1)KLog_U3("~tileIncrementer end:",tileIncrementer,", actualDrawnTiles:",debug_actualDrawnTiles," diff:",(tileIncrementer-debug_actualDrawnTiles));
+    //if(player==&P1)KLog_U3("~tileIncrementer end:",tileIncrementer,", actualDrawnTiles:",debug_actualDrawnTiles," diff:",(tileIncrementer-debug_actualDrawnTiles));
 }
