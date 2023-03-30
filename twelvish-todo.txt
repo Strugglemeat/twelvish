@@ -1,6 +1,20 @@
+fix clearing 4-way connector disappearing issue
+===========
+two types of garbage:
+1) touch match turn into same color (pbancho)
+2) touch match disappear
+=============
+using hold piece (start button) in conjunction with 2pcs dropping doesn't work properly
+==========
+make disappearing blink time get gradually faster
+set a baseline per player
+subtract 1000 each time
+reset it when starting a new conn for the first time
+using this big math might be suboptimal
+=========
 BUG: some sort of phantom matching at least at ground lvl when in 2match
 ======
-use a different 5 colors for each player
+use a different set of 6 colors for each player
 ======
 check for ALL CLEAR        P1.flag_allClear
 =========
@@ -13,9 +27,9 @@ use a LUT to determine the offsets of collisionTest
 if player->flag_flippedHorizontal==false, offsets are as now
 if player->flag_flippedHorizontal==true, offsets are all changed
 ========
-controls: fast drop and having more than 1 spell slot are mutually exclusive
+controls: fast drop and having more than 1 spell slot are mutually exclusive (due to UP arrow)
 =======
-re-implement garbage system (press A button to send)
+re-implement garbage system (debug: press A button to send)
 *ai sends garbage
 =========
 VS stuff:
@@ -55,3 +69,13 @@ MP modes
 *MIRROR: both players always get the same loadout. first round, random char+spell. after that, loser picks char+spell
 *FREE: prior to the match, players choose any attributes and 1 spell (no cost restrictions on spells)
 *PEACE: each player plays endless mode ala Pnickies
+====
+title screen: use kcowolf vert oscillation
+=========
+DEF 1 star = ~125% garbage received multiplier
+DEF 2 stars = 100% garbage received multiplier
+DEF 3 stars = ~75% garbage received multiplier
+
+ATK 1 star = ~75% garbage sent multiplier
+ATK 2 stars = 100% garbage sent multiplier
+ATK 3 stars = 125% garbage sent multiplier
