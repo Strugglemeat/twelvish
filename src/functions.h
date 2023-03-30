@@ -18,7 +18,7 @@ typedef struct {
     u8 blinkingSave[9][18];
 
     Sprite* fallingPieceSprite[fallingPieceNumberOfTiles];
-    u8 fallingPiece[fallingPieceNumberOfTiles];//used in createPiece
+    u8 fallingPiece[fallingPieceNumberOfTiles];//used in generatePiece
     u8 nextPiece[fallingPieceNumberOfTiles];
     u16 spriteX;
     s16 spriteY;
@@ -55,9 +55,6 @@ typedef struct {
     bool AIspawnCalc;
     u8 AIcolumnview[maxX+1];
 
-//debug
-    u8 playerNum;//used only in debug
-
 //options
     u8 optionDropStyle;
     u8 optionNumColors;
@@ -74,6 +71,18 @@ typedef struct {
     u8 holdingPiece[fallingPieceNumberOfTiles];//for the start button HOLD function
     bool flag_allowed_to_swap;
 
+//NUMBER OF PCS FOR NEXT AND DROP
+    bool fallBlocksTwo;//2 or 3
+    bool nextBlocksTwo;//2 or 3
+/*
+optionPiecesDropping:
+random - always 2 or 3 (optionPiecesDropping=0)
+alternate - always switch between 2 and 3 (optionPiecesDropping=1)
+2 pcs (optionPiecesDropping=2)
+3 pcs (optionPiecesDropping=3)
+*/
+
+//COUNTER
     s16 numTimesSpawned;
 
 } Player;
@@ -89,7 +98,7 @@ void printDebug();
 void loadCharacters();
 
 void clearBoardData(Player* player);
-void drawFallingSprite(Player* player);
+static void drawFallingSprite(Player* player);
 void drawFullTile(Player* player, u8 xPos, u8 yPos);
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY);
 void drawCombosAndChains(Player* player);
@@ -105,7 +114,7 @@ void checkMatches(Player* player);
 void processGravity(Player* player);
 
 void drawSharedNext();
-void drawPlayerNext(Player* player);
+static void drawPlayerNext(Player* player);
 void processSpawn(Player* player);
 void swapPiece(Player* player);
 void generatePiece(Player* player);
@@ -123,11 +132,11 @@ void processAI();
 
 void startupOptionsMenu();
 
-u16 innerConnectorLUT(u16 section);
-u16 updownLUT(u16 section);
-bool updownLUTflag(u16 section);
-u16 leftrightLUT(u16 section);
-bool leftrightLUTflag(u16 section);
+static u16 innerConnectorLUT(u16 section);
+static u16 updownLUT(u16 section);
+static bool updownLUTflag(u16 section);
+static u16 leftrightLUT(u16 section);
+static bool leftrightLUTflag(u16 section);
 
 u8 sharedNext[fallingPieceNumberOfTiles];
 bool flag_sharedNextDraw;
@@ -338,9 +347,6 @@ u8 spawnSamePieceCounter;
 
 void initialize()
 {
-    P1.playerNum=1;
-    P2.playerNum=2;
-
     P1.fallLockingTimerNum=1;
     P2.fallLockingTimerNum=2;
     P1.blinkTimerNum=3;
@@ -407,39 +413,38 @@ void initialize()
     P1.flag_allowed_to_swap=true;
     P2.flag_allowed_to_swap=true;
 
-    //P1.optionNumColors=globalNumColors;//set in options
     P2.optionNumColors=globalNumColors;
 
-    //P1.optionNumConnections=2;
     P2.optionNumConnections=3;
 
     P2.optionDiagonalMatching=true;
 
     P2.optionPiecesDropping=3;
-
-    generatePiece(&P1);
-    generatePiece(&P2);
 }
 
-void drawFallingSprite(Player* player)
+static void drawFallingSprite(Player* player)
 {
     SPR_setPosition(player->fallingPieceSprite[2],player->spriteX,player->spriteY);
     SPR_setPosition(player->fallingPieceSprite[1],player->spriteX,player->spriteY-TILESIZE);
-    if(player->optionPiecesDropping==3)SPR_setPosition(player->fallingPieceSprite[0],player->spriteX,player->spriteY-TILESIZE-TILESIZE);
+    if(player->fallBlocksTwo==FALSE)SPR_setPosition(player->fallingPieceSprite[0],player->spriteX,player->spriteY-TILESIZE-TILESIZE);
+    //if(player->optionPiecesDropping==3)SPR_setPosition(player->fallingPieceSprite[0],player->spriteX,player->spriteY-TILESIZE-TILESIZE);
 }
 
-void drawPlayerNext(Player* player)
+static void drawPlayerNext(Player* player)
 {
     #define nextYpos 4
 
     u8 playerNextxPos=15;
     if(player==&P2)playerNextxPos+=10;
+
     u8 colorAdd=0;
 
-    for (u8 i=(fallingPieceNumberOfTiles-player->optionPiecesDropping);i<fallingPieceNumberOfTiles;i++)    //for (u8 i=0;i<player->optionPiecesDropping;i++)
+    if(player->optionPiecesDropping!=3)VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 0), playerNextxPos, nextYpos, 1, 1);//always clear top block
+
+    for (u8 i=player->nextBlocksTwo;i<fallingPieceNumberOfTiles;i++)    //for (u8 i=0;i<player->optionPiecesDropping;i++)
     {
         colorAdd=(player->nextPiece[i]-1)<<2;//multiply by 4
-        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), playerNextxPos, nextYpos+i, 1, 1);    
+        VDP_fillTileMapRect(BG_A, TILE_ATTR_FULL(PAL3, TRUE, FALSE, FALSE, 1+colorAdd), playerNextxPos, nextYpos+i, 1, 1);
     }
 }
 
@@ -465,7 +470,8 @@ void doCycle(Player* player, u8 direction)
 {
     u8 tempPieceHolder;
 
-    if(player->optionPiecesDropping==3)
+    //if(player->optionPiecesDropping==3)
+    if(player->fallBlocksTwo==FALSE)
     {
         if(direction==DOWN)
         {
@@ -482,7 +488,8 @@ void doCycle(Player* player, u8 direction)
             player->fallingPiece[2]=tempPieceHolder;
         }
     }
-    else if(player->optionPiecesDropping==2)
+    //else if(player->optionPiecesDropping==2)
+    if(player->fallBlocksTwo==TRUE)
     {
         if(direction==DOWN)
         {
@@ -499,7 +506,8 @@ void doCycle(Player* player, u8 direction)
     }
 
     //for (u8 spriteIndex=0;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
-    for (u8 spriteIndex=(fallingPieceNumberOfTiles-player->optionPiecesDropping);spriteIndex<fallingPieceNumberOfTiles;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);    
+    //for (u8 spriteIndex=(fallingPieceNumberOfTiles-player->optionPiecesDropping);spriteIndex<fallingPieceNumberOfTiles;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);    
+    for (u8 spriteIndex=player->fallBlocksTwo;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
 }
 
 bool collisionTest(Player* player, u8 direction)
@@ -546,22 +554,46 @@ bool collisionTest(Player* player, u8 direction)
 
 void generatePiece(Player* player)
 {
-    for (u8 createIndex=(fallingPieceNumberOfTiles-player->optionPiecesDropping);createIndex<fallingPieceNumberOfTiles;createIndex++)//for (u8 createIndex=1;createIndex<3;createIndex++)
-    {
-        player->fallingPiece[createIndex]=player->nextPiece[createIndex];
-        
-        SPR_setFrame(player->fallingPieceSprite[createIndex],player->fallingPiece[createIndex]-1);
+    player->numTimesSpawned++;
 
-        player->nextPiece[createIndex]=sharedNext[createIndex];
+    for (u8 createIndex=0;createIndex<fallingPieceNumberOfTiles;createIndex++)//create this player's next piece (regardless of whether they're on 2 or 3 pcs drop)
+    {
+        player->fallingPiece[createIndex]=player->nextPiece[createIndex];//falling piece assign color
+        
+        SPR_setFrame(player->fallingPieceSprite[createIndex],player->fallingPiece[createIndex]-1);//set the sprite frame
+
+        player->nextPiece[createIndex]=sharedNext[createIndex];//next piece assign color
 
         sharedNext[createIndex]=randomRange(1,(globalNumColors-1));//set the next sharednextpieces
 
-        if(player->optionNumColors==4 && player->nextPiece[createIndex]==globalNumColors-1)player->nextPiece[createIndex]=randomRange(1,globalNumColors-2);
+        if(player->optionNumColors==4 && player->nextPiece[createIndex]==globalNumColors-1)player->nextPiece[createIndex]=randomRange(1,globalNumColors-2);//for this piece, if color is 5 and player is on 4 colors, re-random it
     }
     
-    flag_sharedNextDraw=true;
-    player->numTimesSpawned++;
-    player->flag_drawNext=true;
+    player->flag_drawNext=true;//re-draw this player's next piece
+    flag_sharedNextDraw=true;//re-draw the shared next piece
+
+    if(player->optionPiecesDropping>=2)return;//if we're set to just do 2 or 3, leave, nothing else to be done
+
+    if(player->optionPiecesDropping==1)//alternate
+    {
+        player->fallBlocksTwo=!player->fallBlocksTwo;
+        player->nextBlocksTwo=!player->nextBlocksTwo;
+    }
+
+    if(player->optionPiecesDropping==0)//random
+    {
+        player->fallBlocksTwo=randomRange(0,1);
+        player->nextBlocksTwo=randomRange(0,1);
+    }
+
+/*
+optionPiecesDropping:
+random - always 2 or 3 (optionPiecesDropping=0)
+alternate - always switch between 2 and 3 (optionPiecesDropping=1)
+2 pcs (optionPiecesDropping=2)
+3 pcs (optionPiecesDropping=3)
+*/
+
 }
 
 void swapPiece(Player* player)
@@ -843,21 +875,12 @@ void manageFalling(Player* player)
 
 void pieceIntoBoard(Player* player)
 {
-    //KLog("$PIECE INTO BOARD");
 //write the colors of the locked pieces into the array
     player->board[player->xPosition][player->yPosition]=player->fallingPiece[2];
     player->board[player->xPosition][player->yPosition-1]=player->fallingPiece[1];
-    player->board[player->xPosition][player->yPosition-2]=player->fallingPiece[0];
+    if(player->fallBlocksTwo==FALSE)player->board[player->xPosition][player->yPosition-2]=player->fallingPiece[0];
 
-/*move this to somewhere else, let them set a piece into the top-out place and try for a match
-    if(player->board[4][1]!=0 || player->yPosition<=2)//check for top-out
-    {
-        player->flag_status=toppedOut;
-        return;
-    }
-*/
-
-    //KLog_U1("^^pieceIntoBoard updated the draw parameters for P",player->playerNum);
+//resetting
     player->drawStartX=player->xPosition;
     player->drawStartY=player->yPosition-2;
     player->drawEndX=player->xPosition+1;
@@ -873,8 +896,6 @@ void pieceIntoBoard(Player* player)
     if(player->AIplayer==true)player->AIspawnCalc=true;
 
     player->flag_allowed_to_swap=true;
-
-    //generatePiece(player);
 
     player->flag_status=checkingMatches;
 }
@@ -1151,7 +1172,7 @@ void startupOptionsMenu()
     #define optionsX 14
     #define optionsBaseY 0
 
-    #define numSelections 5
+    #define numSelections 6//total number of selections in this menu
 
     s8 menuPosition=0;
     u16 optionsMenuButtons;
@@ -1180,6 +1201,7 @@ void startupOptionsMenu()
 
     P1.optionDiagonalMatching=true;//default should be TRUE
 
+    s8 piecesDroppingSelection=3;
     P1.optionPiecesDropping=3;//default should be 3
 
     #define counterMaxAmount 6
@@ -1213,8 +1235,8 @@ void startupOptionsMenu()
             return;
         }
 
-//left and right in the menu
-        if(menuPosition==0 && releasedLeftRight==true)
+//left and right in each of the menu selections
+        if(menuPosition==0 && releasedLeftRight==true)//DROP
         {
             if(optionsMenuButtons & BUTTON_RIGHT)
             {
@@ -1227,20 +1249,20 @@ void startupOptionsMenu()
                 releasedLeftRight=false;
             }
         }
-        else if(menuPosition==1 && releasedLeftRight==true)
+        else if(menuPosition==1 && releasedLeftRight==true)//PIECES
         {
-            if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P1.optionPiecesDropping==3)
+            if(optionsMenuButtons & BUTTON_RIGHT)
             {
-                P1.optionPiecesDropping=2;
+                piecesDroppingSelection++;
                 releasedLeftRight=false;
             }
-            else if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P1.optionPiecesDropping==2)
+            if(optionsMenuButtons & BUTTON_LEFT)
             {
-                P1.optionPiecesDropping=3;
+                piecesDroppingSelection--;
                 releasedLeftRight=false;
             }
         }
-        else if(menuPosition==2 && releasedLeftRight==true)
+        else if(menuPosition==2 && releasedLeftRight==true)//COLORS
         {
             if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P1.optionNumColors==5)
             {
@@ -1253,7 +1275,7 @@ void startupOptionsMenu()
                 releasedLeftRight=false;
             }
         }
-        else if(menuPosition==3 && releasedLeftRight==true)
+        else if(menuPosition==3 && releasedLeftRight==true)//HOLDPIECE WITH START BUTTON
         {
             if(optionsMenuButtons & BUTTON_RIGHT)
             {
@@ -1266,7 +1288,7 @@ void startupOptionsMenu()
                 releasedLeftRight=false;
             }
         }
-        else if(menuPosition==4 && releasedLeftRight==true)
+        else if(menuPosition==4 && releasedLeftRight==true)//PIECES CONNECTED REQUIRED FOR MATCHING
         {
             if(optionsMenuButtons & BUTTON_RIGHT)
             {
@@ -1279,7 +1301,7 @@ void startupOptionsMenu()
                 releasedLeftRight=false;
             }
         }
-        else if(menuPosition==5 && releasedLeftRight==true)
+        else if(menuPosition==5 && releasedLeftRight==true)//DIAGONAL MATCHING TOGGLE
         {
             if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P1.optionDiagonalMatching==true)
             {
@@ -1292,7 +1314,7 @@ void startupOptionsMenu()
                 releasedLeftRight=false;
             }
         }
-        else if(menuPosition==7 && releasedLeftRight==true)
+        else if(menuPosition==6 && releasedLeftRight==true)//CPU CONTROLLED PLAYER
         {
             if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P2.AIplayer==true)
             {
@@ -1314,6 +1336,13 @@ void startupOptionsMenu()
 
         if(connectionsSelection>2)connectionsSelection=0;
         else if(connectionsSelection<0)connectionsSelection=2;
+
+        if(piecesDroppingSelection>3)piecesDroppingSelection=0;
+        else if(piecesDroppingSelection<0)piecesDroppingSelection=3;
+        //0=random
+        //1=alternating
+        //2=always 2
+        //3=always 3
 
         SYS_doVBlankProcess();
 
@@ -1365,6 +1394,51 @@ void startupOptionsMenu()
 
         VDP_drawText(debug_string,optionsX,optionsBaseY+6);
         P1.optionDropStyle=dropSelection;
+
+//PIECES option
+        if(menuPosition!=1)
+        {
+            if(piecesDroppingSelection==3)sprintf(debug_string," PIECES:[3]");
+            else if(piecesDroppingSelection==2)sprintf(debug_string," PIECES:[2]");
+            else if(piecesDroppingSelection==1)sprintf(debug_string," PIECES:[ALTRN]");
+            else if(piecesDroppingSelection==0)sprintf(debug_string," PIECES:[RAND]");
+        }
+        else if(menuPosition==1)
+        {
+            if(selectedArrowsToggleCounter==true)
+            {
+                if(piecesDroppingSelection==3)sprintf(debug_string,">PIECES:[3]");
+                else if(piecesDroppingSelection==2)sprintf(debug_string,">PIECES:[2]");
+                else if(piecesDroppingSelection==1)sprintf(debug_string,">PIECES:[ALTRN]");
+                else if(piecesDroppingSelection==0)sprintf(debug_string,">PIECES:[RAND]");
+            }
+            else
+            {
+                if(piecesDroppingSelection==3)sprintf(debug_string," PIECES:[3]");
+                else if(piecesDroppingSelection==2)sprintf(debug_string," PIECES:[2]");
+                else if(piecesDroppingSelection==1)sprintf(debug_string," PIECES:[ALTRN]");
+                else if(piecesDroppingSelection==0)sprintf(debug_string," PIECES:[RAND]");
+            }
+        }
+
+        P1.optionPiecesDropping=piecesDroppingSelection;
+        if(P1.optionPiecesDropping==2)
+        {
+            P1.fallBlocksTwo=TRUE;
+            P1.nextBlocksTwo=TRUE;
+        }
+        else if(P1.optionPiecesDropping==3)
+        {
+            P1.fallBlocksTwo=FALSE;
+            P1.nextBlocksTwo=FALSE;
+        }
+        else if(P1.optionPiecesDropping==1)
+        {
+            P1.fallBlocksTwo=FALSE;
+            P1.nextBlocksTwo=TRUE;
+        }
+
+        VDP_drawText(debug_string,optionsX-2,optionsBaseY+8);
 
 //COLORS option
         if(menuPosition!=2)
@@ -1494,39 +1568,13 @@ void startupOptionsMenu()
 
         VDP_drawText(debug_string,optionsX-1,optionsBaseY+16);
 
-//PIECES option
-        if(menuPosition!=1)
-        {
-            if(P1.optionPiecesDropping==3)sprintf(debug_string," PIECES:[3]");
-            else if(P1.optionPiecesDropping==2)sprintf(debug_string," PIECES:[2]");
-        }
-        else if(menuPosition==1)
-        {
-            if(selectedArrowsToggleCounter==true)
-            {
-                if(P1.optionPiecesDropping==3)sprintf(debug_string,">PIECES:[3]");
-                else if(P1.optionPiecesDropping==2)sprintf(debug_string,">PIECES:[2]");
-            }
-            else
-            {
-                if(P1.optionPiecesDropping==3)sprintf(debug_string," PIECES:[3]");
-                else if(P1.optionPiecesDropping==2)sprintf(debug_string," PIECES:[2]");
-            }
-        }
-
-        VDP_drawText(debug_string,optionsX-2,optionsBaseY+8);
-
-//rotate is menu position 6
-        sprintf(debug_string,"ROTATE:[OFF]");
-        VDP_drawText(debug_string,optionsX-1,optionsBaseY+18);
-
 //CPU option
-        if(menuPosition!=7)
+        if(menuPosition!=6)
         {
             if(P2.AIplayer==true)sprintf(debug_string," CPU:[ON]");
             else if(P2.AIplayer==false)sprintf(debug_string," CPU:[OFF]");
         }
-        else if(menuPosition==7)
+        else if(menuPosition==6)
         {
             if(selectedArrowsToggleCounter==true)
             {
@@ -1540,12 +1588,14 @@ void startupOptionsMenu()
             }
         }
 
-        VDP_drawText(debug_string,optionsX+1,optionsBaseY+20);
+        VDP_drawText(debug_string,optionsX+1,optionsBaseY+18);
 
 //tell them to press start to leave
         sprintf(debug_string,"PRESS START");
         VDP_drawText(debug_string,optionsX+0,optionsBaseY+24);  
     }
+
+    setRandomSeed(GET_HVCOUNTER);//when leaving this menu system and starting the game
 }
 
 void drawCombosAndChains(Player* player)
@@ -1676,7 +1726,7 @@ void processAI()
     }
 }
 
-u16 updownLUT(u16 section)
+static u16 updownLUT(u16 section)
 {
     static const u16 lookup[103]=
     {0,        2,        2+ADDAMOUNT,        2+ADDAMOUNT2,        2+ADDAMOUNT3,        2+ADDAMOUNT4,        2+ADDAMOUNT5,        0,        0,        0,        0,        0,        0,        0,        0,        0,        2,        1,        extra_tiles_start+15,        extra_tiles_start+16,        extra_tiles_start+17,        extra_tiles_start+18,        extra_tiles_start+19,        0,        0,        0,        0,        0,        0,        0,        0,        0,        2+ADDAMOUNT,        extra_tiles_start+15,        1+ADDAMOUNT,        extra_tiles_start+20,        extra_tiles_start+21,        extra_tiles_start+22,        extra_tiles_start+23,        0,        0,        0,        0,        0,        0,        0,        0,        0,        2+ADDAMOUNT2,        extra_tiles_start+16,        extra_tiles_start+20,        1+ADDAMOUNT2,        extra_tiles_start+24,        extra_tiles_start+25,        extra_tiles_start+26,        0,        0,        0,        0,        0,        0,        0,        0,        0,        2+ADDAMOUNT3,        extra_tiles_start+17,        extra_tiles_start+21,        extra_tiles_start+24,        1+ADDAMOUNT3,        extra_tiles_start+27,        extra_tiles_start+28,        0,        0,        0,        0,        0,        0,        0,        0,        0,        2+ADDAMOUNT4,        extra_tiles_start+18,        extra_tiles_start+22,        extra_tiles_start+25,        extra_tiles_start+27,        1+ADDAMOUNT4,        extra_tiles_start+29,        0,        0,        0,        0,        0,        0,        0,        0,        0,        2+ADDAMOUNT5,        extra_tiles_start+19,        extra_tiles_start+23,        extra_tiles_start+26,        extra_tiles_start+28,        extra_tiles_start+29,        1+ADDAMOUNT5
@@ -1687,7 +1737,7 @@ u16 updownLUT(u16 section)
     return section;
 }
 
-bool updownLUTflag(u16 section)
+static bool updownLUTflag(u16 section)
 {
     static const bool lookup[103]=
     {0,TRUE,TRUE,TRUE,TRUE,TRUE,TRUE,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,TRUE,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,TRUE,TRUE,0,0,0,0,0,0,0,0,0,0,0,0,0,0,TRUE,TRUE,TRUE,0,0,0,0,0,0,0,0,0,0,0,0,0,TRUE,TRUE,TRUE,TRUE,0,0,0,0,0,0,0,0,0,0,0,0,TRUE,TRUE,TRUE,TRUE,TRUE,0,
@@ -1698,7 +1748,7 @@ bool updownLUTflag(u16 section)
     return returnFlag;
 }
 
-u16 leftrightLUT(u16 section)
+static u16 leftrightLUT(u16 section)
 {
     static const u16 lookup[103]=
     {0,        3,        3+ADDAMOUNT,        3+ADDAMOUNT2,        3+ADDAMOUNT3,        3+ADDAMOUNT4,        3+ADDAMOUNT5,        0,        0,        0,        0,        0,        0,        0,        0,        0,        3,        1,        extra_tiles_start+0,        extra_tiles_start+1,        extra_tiles_start+2,        extra_tiles_start+3,        extra_tiles_start+4,        0,        0,        0,        0,        0,        0,        0,        0,        0,        3+ADDAMOUNT,        extra_tiles_start+0,        1+ADDAMOUNT,        extra_tiles_start+5,        extra_tiles_start+6,        extra_tiles_start+7,        extra_tiles_start+8,        0,        0,        0,        0,        0,        0,        0,        0,        0,        3+ADDAMOUNT2,        extra_tiles_start+1,        extra_tiles_start+5,        1+ADDAMOUNT2,        extra_tiles_start+9,        extra_tiles_start+10,        extra_tiles_start+11,        0,        0,        0,        0,        0,        0,        0,        0,        0,        3+ADDAMOUNT3,        extra_tiles_start+2,        extra_tiles_start+6,        extra_tiles_start+9,        1+ADDAMOUNT3,        extra_tiles_start+12,        extra_tiles_start+13,        0,        0,        0,        0,        0,        0,        0,        0,        0,        3+ADDAMOUNT4,        extra_tiles_start+3,        extra_tiles_start+7,        extra_tiles_start+10,        extra_tiles_start+12,        1+ADDAMOUNT4,        extra_tiles_start+14,        0,        0,        0,        0,        0,        0,        0,        0,        0,        3+ADDAMOUNT5,        extra_tiles_start+4,        extra_tiles_start+8,        extra_tiles_start+11,        extra_tiles_start+13,        extra_tiles_start+14,        1+ADDAMOUNT5
@@ -1709,7 +1759,7 @@ u16 leftrightLUT(u16 section)
     return section;
 }
 
-bool leftrightLUTflag(u16 section)
+static bool leftrightLUTflag(u16 section)
 {
     static const bool lookup[103]=
     {0,        FALSE,        FALSE,        FALSE,        FALSE,        FALSE,        FALSE,        0,        0,        0,        0,        0,        0,        0,        0,        0,        TRUE,        FALSE,        FALSE,        FALSE,        FALSE,        FALSE,        FALSE,        0,        0,        0,        0,        0,        0,        0,        0,        0,        TRUE,        TRUE,        TRUE,        FALSE,        FALSE,        FALSE,        FALSE,        0,        0,        0,        0,        0,        0,        0,        0,        0,        TRUE,        TRUE,        TRUE,        FALSE,        FALSE,        FALSE,        FALSE,        0,        0,        0,        0,        0,        0,        0,        0,        0,        TRUE,        TRUE,        TRUE,        TRUE,        FALSE,        FALSE,        FALSE,        0,        0,        0,        0,        0,        0,        0,        0,        0,        TRUE,        TRUE,        TRUE,        TRUE,        TRUE,        FALSE,        FALSE,        0,        0,        0,        0,        0,        0,        0,        0,        0,        TRUE,        TRUE,        TRUE,        TRUE,        TRUE,        TRUE,        FALSE,
@@ -1720,7 +1770,7 @@ bool leftrightLUTflag(u16 section)
     return returnFlag;
 }
 
-u16 innerConnectorLUT(u16 section)
+static u16 innerConnectorLUT(u16 section)
 {
     #define allcolor1 0x4444
     #define allcolor2 0x5555

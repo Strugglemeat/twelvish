@@ -17,8 +17,6 @@ int main()
 
     loadTiles();
 
-    setRandomSeed(GET_HVCOUNTER*GET_VCOUNTER*GET_HCOUNTER);
-
     VDP_drawImageEx(BG_B,&gridbg,TILE_ATTR_FULL(PAL0, TRUE, FALSE, FALSE, 0x58B),0,0,TRUE,TRUE);//0x58d
     PAL_setPalette(PAL0,cloud.palette->data,DMA);
     PAL_setColor(0,RGB8_8_8_TO_VDPCOLOR(255,255,255));
