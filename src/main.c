@@ -61,12 +61,12 @@ int main()
 
         if(flag_sharedNextDraw==true)drawSharedNext();
 
-        if(getTimer(33,false)>=62000 && patrako_is_cheering==true)
+        if(getTimer(33,false)>=62000 && P1.avatarCheering==true)
         {
-            SPR_setFrame(patrako_idle,0);
-            SPR_setVisibility(patrako_cheer,HIDDEN);
-            SPR_setVisibility(patrako_idle,VISIBLE);
-            patrako_is_cheering=false;
+            SPR_setFrame(P1.avatarIdle,0);
+            SPR_setVisibility(P1.avatarCheer,HIDDEN);
+            SPR_setVisibility(P1.avatarIdle,VISIBLE);
+            P1.avatarCheering=false;
         }
         
         SPR_update();
@@ -231,4 +231,80 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     }
 
     //if(player==&P1)KLog_U3("~tileIncrementer end:",tileIncrementer,", actualDrawnTiles:",debug_actualDrawnTiles," diff:",(tileIncrementer-debug_actualDrawnTiles));
+}
+
+void loadCharacter(Player* player)
+{
+    bool FlipP2=false;
+    s8 whichPalette=PAL1;//PAL1 = P1, PAL2 = P2
+    u8 spriteXpos=106;
+
+    if(player==&P2)
+    {
+        FlipP2=true;
+        whichPalette=PAL2;
+        spriteXpos=156;
+    }
+
+    switch(player->whichCharacter)
+    {
+        case 1://patrako
+        PAL_setPalette(whichPalette,patrakoIdle.palette->data,DMA);
+        player->avatarIdle = SPR_addSpriteSafe(&patrakoIdle, spriteXpos, 144, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        player->avatarCheer = SPR_addSpriteSafe(&patrakoCheer, spriteXpos, 130, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        break;
+
+        case 2://ken
+        PAL_setPalette(whichPalette,kenIdle.palette->data,DMA);
+        player->avatarIdle = SPR_addSpriteSafe(&kenIdle, spriteXpos, 136,TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        player->avatarCheer = SPR_addSpriteSafe(&kenCheer, spriteXpos, 130, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        break;
+
+        case 3://sakura
+        PAL_setPalette(whichPalette,sakuraIdle.palette->data,DMA);
+        player->avatarIdle = SPR_addSpriteSafe(&sakuraIdle, spriteXpos, 136,TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        player->avatarCheer = SPR_addSpriteSafe(&sakuraCheer, spriteXpos, 130, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        break;
+    }
+
+    if(player==&P1)
+    {
+        SPR_setVisibility(P1.avatarCheer,HIDDEN);
+        P1.avatarCheering=false;
+    }
+    else if(player==&P2)
+    {
+        SPR_setVisibility(P2.avatarCheer,HIDDEN);
+        P2.avatarCheering=false;        
+    }
+}
+
+void loadCharacterLost(Player* player)
+{
+    bool FlipP2=false;
+    s8 whichPalette=PAL1;//PAL1 = P1, PAL2 = P2
+    u8 spriteXpos=106;
+
+    if(player==&P2)
+    {
+        FlipP2=true;
+        whichPalette=PAL2;
+        spriteXpos=156;
+    }
+
+    switch(player->whichCharacter)
+    {
+        case 1://patrako
+        player->avatarLost = SPR_addSpriteSafe(&patrakoLost, spriteXpos,144, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        break;
+
+        case 2://ken
+        player->avatarLost = SPR_addSpriteSafe(&kenLost, spriteXpos,136, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        break;
+
+        case 3://sakura
+        player->avatarLost = SPR_addSpriteSafe(&sakuraLost, spriteXpos,152, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        break;
+    }
+
 }

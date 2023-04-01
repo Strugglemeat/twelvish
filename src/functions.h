@@ -74,16 +74,21 @@ typedef struct {
 //NUMBER OF PCS FOR NEXT AND DROP
     bool fallBlocksTwo;//2 or 3
     bool nextBlocksTwo;//2 or 3
-/*
-optionPiecesDropping:
-random - always 2 or 3 (optionPiecesDropping=0)
-alternate - always switch between 2 and 3 (optionPiecesDropping=1)
-2 pcs (optionPiecesDropping=2)
-3 pcs (optionPiecesDropping=3)
-*/
 
 //COUNTER
     s16 numTimesSpawned;
+
+//SPRITES
+    s8 whichCharacter;
+    Sprite* avatarIdle;
+    bool avatarCheering;
+    Sprite* avatarLost;
+    Sprite* avatarCheer;
+
+//COMBAT
+    s8 attackOption;
+    s8 defenseOption;
+    s8 garbageOption;
 
 } Player;
 
@@ -95,8 +100,9 @@ void initialize();
 void loadTiles();
 void loadDebugFieldData();
 void printDebug();
-void loadCharacters();
 
+void loadCharacter(Player* player);
+void loadCharacterLost(Player* player);
 void clearBoardData(Player* player);
 static void drawFallingSprite(Player* player);
 void drawFullTile(Player* player, u8 xPos, u8 yPos);
@@ -115,8 +121,9 @@ void processGravity(Player* player);
 
 void drawSharedNext();
 static void drawPlayerNext(Player* player);
-void processSpawn(Player* player);
-void swapPiece(Player* player);
+void resetFallingPiece(Player* player);
+static void swapPiece(Player* player);
+static void storePiece(Player* player);
 void generatePiece(Player* player);
 
 void effectFastDrop(Player* player);
@@ -201,6 +208,8 @@ enum colors{
 #define ADDAMOUNT4 16
 #define ADDAMOUNT5 20
 #define extra_tiles_start  (4 + (ADDAMOUNT*(globalNumColors-1)) + 1)
+#define innerSectionsVRAM extra_tiles_start+30// 64 tiles worth of VRAM (32 per player)
+#define endOfInnerSectionsVRAM innerSectionsVRAM+64
 
 #define lockingDelayMaxTime 24000//higher is more time to let the player lock
 #define maxLaterals maxX-1 //how many times a player can fiddle with their sonic dropped piece
@@ -215,6 +224,10 @@ enum optionsStartButton{
     SKIP=1,
     HOLD=2
 };
+
+//to ensure that both players get the same next piece at round start
+u8 initialNextPiece[fallingPieceNumberOfTiles];
+u8 spawnSamePieceCounter;
 
 void loadTiles()
 {
@@ -289,9 +302,6 @@ void loadTiles()
     PAL_setPalette(PAL3,fallingSingleAll.palette->data,DMA);
 }
 
-#define innerSectionsVRAM extra_tiles_start+30// 64 tiles worth of VRAM (32 per player)
-#define endOfInnerSectionsVRAM innerSectionsVRAM+64
-
 void clearBoardData(Player* player)//only called at initialization
 {
     for (u8 boardX=1;boardX<maxX+1;boardX++)
@@ -335,16 +345,6 @@ void loadDebugFieldData()
 Sprite* sharedNextSpawnCloud;
 u8 globalSpawnCloudVisibilityTimer;//replace with SPR_getAnimationDone(sharedNextSpawnCloud) in later SGDK
 
-Sprite* patrako_idle;
-Sprite* patrako_lost;
-Sprite* patrako_cheer;
-bool patrako_is_cheering;
-
-Sprite* sakuraSpr;
-
-u8 initialNextPiece[fallingPieceNumberOfTiles];//this to ensure that both players get the same next piece at round start
-u8 spawnSamePieceCounter;
-
 void initialize()
 {
     P1.fallLockingTimerNum=1;
@@ -357,8 +357,10 @@ void initialize()
     SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
     SPR_setPosition(sharedNextSpawnCloud,148,27);
 
-//temporary characters
-    loadCharacters();
+//characters
+    P2.whichCharacter=randomRange(1,3);
+    loadCharacter(&P1);
+    loadCharacter(&P2);
 
     clearBoardData(&P1);
     clearBoardData(&P2);
@@ -573,49 +575,41 @@ void generatePiece(Player* player)
     flag_sharedNextDraw=true;//re-draw the shared next piece
 
     if(player->optionPiecesDropping>=2)return;//if we're set to just do 2 or 3, leave, nothing else to be done
-
-    if(player->optionPiecesDropping==1)//alternate
+    else if(player->optionPiecesDropping==1)//alternate
     {
         player->fallBlocksTwo=!player->fallBlocksTwo;
         player->nextBlocksTwo=!player->nextBlocksTwo;
+        return;
     }
-
-    if(player->optionPiecesDropping==0)//random
+    else if(player->optionPiecesDropping==0)//random
     {
         player->fallBlocksTwo=randomRange(0,1);
         player->nextBlocksTwo=randomRange(0,1);
+        return;
     }
-
-/*
-optionPiecesDropping:
-random - always 2 or 3 (optionPiecesDropping=0)
-alternate - always switch between 2 and 3 (optionPiecesDropping=1)
-2 pcs (optionPiecesDropping=2)
-3 pcs (optionPiecesDropping=3)
-*/
-
 }
 
-void swapPiece(Player* player)
+static void swapPiece(Player* player)
 {
-    //KLog_U3("FALL - 0:",player->fallingPiece[0],"  1:",player->fallingPiece[1],"  2:",player->fallingPiece[2]);
-    //KLog_U3("HOLD - 0:",player->holdingPiece[0],"  1:",player->holdingPiece[1],"  2:",player->holdingPiece[2]);
     u8 temp[fallingPieceNumberOfTiles];
+
     for(u8 i=0;i<fallingPieceNumberOfTiles;i++)temp[i]=player->fallingPiece[i];//temp and fallingpiece has falling, holding has hold
-    //KLog_U3("TEMP - 0:",temp[0],"  1:",temp[1],"  2:",temp[2]);
     for(u8 i=0;i<fallingPieceNumberOfTiles;i++)player->fallingPiece[i]=player->holdingPiece[i];//temp has falling, falling and holding have hold
     for(u8 i=0;i<fallingPieceNumberOfTiles;i++)player->holdingPiece[i]=temp[i];
 
-    //KLog_U3("after FALL - 0:",player->fallingPiece[0],"  1:",player->fallingPiece[1],"  2:",player->fallingPiece[2]);
-    //KLog_U3("after HOLD - 0:",player->holdingPiece[0],"  1:",player->holdingPiece[1],"  2:",player->holdingPiece[2]);
-
-    for (u8 spriteIndex=fallingPieceNumberOfTiles-player->optionPiecesDropping;spriteIndex<fallingPieceNumberOfTiles;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);//for (u8 spriteIndex=0;spriteIndex<3;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);
+    for (u8 spriteIndex=player->fallBlocksTwo;spriteIndex<fallingPieceNumberOfTiles;spriteIndex++)SPR_setFrame(player->fallingPieceSprite[spriteIndex],player->fallingPiece[spriteIndex]-1);    
 }
 
-void processSpawn(Player* player)
+static void storePiece(Player* player)//save current falling piece to hold area
 {
-    generatePiece(player);//moved from pieceIntoBoard because there was too much lag between landing and chain finish, player can't know what they have next
+    for(u8 i=player->fallBlocksTwo;i<fallingPieceNumberOfTiles;i++)
+    {
+        player->holdingPiece[i]=player->fallingPiece[i];
+    }
+}
 
+void resetFallingPiece(Player* player)
+{
 //set X and Y positions
 //sprite
     if(player==&P1)player->spriteX=spriteXorigin;
@@ -1029,27 +1023,29 @@ void handleInput(Player* player, u16 buttons)
 
     if(player->optionStartButton>0)
     {
+
 //DISCARD-SKIP with start button
         if((buttons & BUTTON_START) && player->flag_releasedStart==true && player->optionStartButton==SKIP && player->flag_allowed_to_swap==true)
         {
-            processSpawn(player);
+            generatePiece(player);
+            resetFallingPiece(player);
             player->flag_releasedStart=false;
             player->flag_allowed_to_swap=false;
         }
 
-//HOLD with start button
+//STORE with start button
         if((buttons & BUTTON_START) && player->flag_releasedStart==true && player->optionStartButton==HOLD && player->flag_status==fallingPiece && player->flag_allowed_to_swap==true)
         {
             if(player->holdingPiece[1]!=0)//if we have a piece saved
             {
                 swapPiece(player);
-                processSpawn(player);
+                resetFallingPiece(player);//calls generatePiece
             }
             else if(player->holdingPiece[1]==0)//if we don't have a piece saved
             {
-                for(u8 i=(fallingPieceNumberOfTiles-player->optionPiecesDropping);i<fallingPieceNumberOfTiles;i++)player->holdingPiece[i]=player->fallingPiece[i];//save current falling piece to hold area //for(u8 i=0;i<3;i++)player->holdingPiece[i]=player->fallingPiece[i];//save current falling piece to hold area
+                storePiece(player);
                 generatePiece(player);
-                processSpawn(player);
+                resetFallingPiece(player);//calls generatePiece
             }
             
             player->flag_releasedStart=false;
@@ -1067,7 +1063,8 @@ void gameLogicSwitch(Player* player)
     {
         case spawningPiece:
             //KLog("$spawned piece");
-            processSpawn(player);
+            generatePiece(player);
+            resetFallingPiece(player);
             break;
 
         case fallingPiece:
@@ -1127,15 +1124,21 @@ void gameOver()
 {
     SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
 
-    SPR_releaseSprite(patrako_idle);
+    SPR_releaseSprite(P1.avatarIdle);
+    SPR_releaseSprite(P2.avatarIdle);
     
     if(P1.flag_status==toppedOut)
     {
-        SPR_releaseSprite(patrako_cheer);
-        patrako_lost = SPR_addSpriteSafe(&patrakoLost, 106,152, TILE_ATTR(PAL2, TRUE, FALSE, FALSE));
-        SPR_setHFlip(patrako_lost, true);
+        SPR_releaseSprite(P1.avatarCheer);
+        loadCharacterLost(&P1);
+        SPR_setVisibility(P2.avatarCheer,VISIBLE);
     }
-    else SPR_setVisibility(patrako_cheer,VISIBLE);
+    else if(P2.flag_status==toppedOut)
+    {
+        SPR_releaseSprite(P2.avatarCheer);
+        loadCharacterLost(&P2);
+        SPR_setVisibility(P1.avatarCheer,VISIBLE);
+    }
 
     u8 frameCounter=0;
     while(frameCounter<30)
@@ -1146,33 +1149,19 @@ void gameOver()
     }
     while(1)
     {
-        if(P1.flag_status==toppedOut)SPR_setFrame(patrako_lost,2);
+        if(P1.flag_status==toppedOut)SPR_setFrame(P1.avatarLost,2);
         SYS_doVBlankProcess();
         SPR_update();
-        if(P1.flag_status==toppedOut)SPR_setFrame(patrako_lost,3);
+        if(P1.flag_status==toppedOut)SPR_setFrame(P1.avatarLost,3);
     }
-}
-
-void loadCharacters()
-{
-    PAL_setPalette(PAL2,patrakoIdle.palette->data,DMA);
-    patrako_idle = SPR_addSpriteSafe(&patrakoIdle, 110, 144, TILE_ATTR(PAL2, TRUE, FALSE, FALSE));
-
-    patrako_cheer = SPR_addSpriteSafe(&patrakoCheer, 98, 130, TILE_ATTR(PAL2, TRUE, FALSE, FALSE));
-    SPR_setVisibility(patrako_cheer,HIDDEN);
-
-    patrako_is_cheering=false;
-
-    PAL_setPalette(PAL1,sakura.palette->data,DMA);
-    sakuraSpr = SPR_addSpriteSafe(&sakura, 158, 136,TILE_ATTR(PAL1, TRUE, FALSE, FALSE));
 }
 
 void startupOptionsMenu()
 {
     #define optionsX 14
-    #define optionsBaseY 0
+    #define optionsBaseY -2
 
-    #define numSelections 6//total number of selections in this menu
+    #define numSelections 10//total number of selections in this menu
 
     s8 menuPosition=0;
     u16 optionsMenuButtons;
@@ -1203,6 +1192,13 @@ void startupOptionsMenu()
 
     s8 piecesDroppingSelection=3;
     P1.optionPiecesDropping=3;//default should be 3
+
+    s8 characterSelection=1;
+
+    s8 attackSelection=2;
+    s8 defenseSelection=2;
+
+    s8 garbageSelection=1;
 
     #define counterMaxAmount 6
 
@@ -1314,7 +1310,59 @@ void startupOptionsMenu()
                 releasedLeftRight=false;
             }
         }
-        else if(menuPosition==6 && releasedLeftRight==true)//CPU CONTROLLED PLAYER
+        else if(menuPosition==6 && releasedLeftRight==true)//which character
+        {
+            if(optionsMenuButtons & BUTTON_RIGHT)
+            {
+                characterSelection++;
+                releasedLeftRight=false;
+            }
+            if(optionsMenuButtons & BUTTON_LEFT)
+            {
+                characterSelection--;
+                releasedLeftRight=false;
+            }
+        }
+        else if(menuPosition==7 && releasedLeftRight==true)//GARBAGE
+        {
+            if(optionsMenuButtons & BUTTON_RIGHT)
+            {
+                garbageSelection++;
+                releasedLeftRight=false;
+            }
+            if(optionsMenuButtons & BUTTON_LEFT)
+            {
+                garbageSelection--;
+                releasedLeftRight=false;
+            }
+        }
+        else if(menuPosition==8 && releasedLeftRight==true)//ATTACK stat
+        {
+            if(optionsMenuButtons & BUTTON_RIGHT)
+            {
+                attackSelection++;
+                releasedLeftRight=false;
+            }
+            if(optionsMenuButtons & BUTTON_LEFT)
+            {
+                attackSelection--;
+                releasedLeftRight=false;
+            }
+        }
+        else if(menuPosition==9 && releasedLeftRight==true)//DEFENSE stat
+        {
+            if(optionsMenuButtons & BUTTON_RIGHT)
+            {
+                defenseSelection++;
+                releasedLeftRight=false;
+            }
+            if(optionsMenuButtons & BUTTON_LEFT)
+            {
+                defenseSelection--;
+                releasedLeftRight=false;
+            }
+        }
+        else if(menuPosition==10 && releasedLeftRight==true)//CPU CONTROLLED PLAYER
         {
             if(((optionsMenuButtons & BUTTON_RIGHT)||(optionsMenuButtons & BUTTON_LEFT)) && P2.AIplayer==true)
             {
@@ -1337,12 +1385,20 @@ void startupOptionsMenu()
         if(connectionsSelection>2)connectionsSelection=0;
         else if(connectionsSelection<0)connectionsSelection=2;
 
-        if(piecesDroppingSelection>3)piecesDroppingSelection=0;
+        if(piecesDroppingSelection>3)piecesDroppingSelection=0;//0=random, 1=alternating, 2=always 2, 3=always 3
         else if(piecesDroppingSelection<0)piecesDroppingSelection=3;
-        //0=random
-        //1=alternating
-        //2=always 2
-        //3=always 3
+
+        if(characterSelection > 3) characterSelection = 1;
+        else if(characterSelection < 1) characterSelection = 3;
+
+        if(attackSelection > 3) attackSelection = 1;
+        else if(attackSelection < 1) attackSelection = 3;
+
+        if(defenseSelection > 3) defenseSelection = 1;
+        else if(defenseSelection < 1) defenseSelection = 3;
+
+        if(garbageSelection > 3) garbageSelection = 1;
+        else if(garbageSelection < 1) garbageSelection = 3;
 
         SYS_doVBlankProcess();
 
@@ -1350,7 +1406,7 @@ void startupOptionsMenu()
         VDP_clearPlane(BG_A,TRUE);
 
         sprintf(debug_string,"Twelvish alpha");
-        VDP_drawText(debug_string,optionsX-1,optionsBaseY+1);
+        VDP_drawText(debug_string,optionsX-1,optionsBaseY+3);
 
 //DROPPING option
         if(menuPosition!=0)
@@ -1476,7 +1532,7 @@ void startupOptionsMenu()
                 break;
 
                 case HOLD:
-                sprintf(debug_string," START:[HOLD]");
+                sprintf(debug_string," START:[STORE]");
                 break;             
             }
         }
@@ -1495,8 +1551,8 @@ void startupOptionsMenu()
                 break;
 
                 case HOLD:
-                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">START:[HOLD]");
-                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," START:[HOLD]");
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">START:[STORE]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," START:[STORE]");
                 break;   
             }  
         }
@@ -1568,13 +1624,182 @@ void startupOptionsMenu()
 
         VDP_drawText(debug_string,optionsX-1,optionsBaseY+16);
 
-//CPU option
+//CHARACTER option
         if(menuPosition!=6)
+        {
+            switch(characterSelection)
+            {
+                case 1:
+                sprintf(debug_string," CHAR:[PATR]");
+                break;
+
+                case 2:
+                sprintf(debug_string," CHAR:[KEN]");
+                break;
+
+                case 3:
+                sprintf(debug_string," CHAR:[SAK]");
+                break;             
+            }
+        }
+        else if(menuPosition==6)
+        {
+            switch(characterSelection)
+            {
+                case 1:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">CHAR:[PATR]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," CHAR:[PATR]");
+                break;
+
+                case 2:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">CHAR:[KEN]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," CHAR:[KEN]");
+                break;
+
+                case 3:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">CHAR:[SAK]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," CHAR:[SAK]");
+                break;   
+            }  
+        }
+
+        VDP_drawText(debug_string,optionsX,optionsBaseY+18);
+        P1.whichCharacter=characterSelection;
+
+//GARBAGE type option
+        if(menuPosition!=7)
+        {
+            switch(garbageSelection)
+            {
+                case 1:
+                sprintf(debug_string," GARB:[A]");
+                break;
+
+                case 2:
+                sprintf(debug_string," GARB:[B]");
+                break;
+
+                case 3:
+                sprintf(debug_string," GARB:[C]");
+                break;             
+            }
+        }
+        else if(menuPosition==7)
+        {
+            switch(garbageSelection)
+            {
+                case 1:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">GARB:[A]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," GARB:[A]");
+                break;
+
+                case 2:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">GARB:[B]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," GARB:[B]");
+                break;
+
+                case 3:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">GARB:[C]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," GARB:[C]");
+                break;   
+            }  
+        }
+
+        VDP_drawText(debug_string,optionsX,optionsBaseY+20);
+        P1.garbageOption=garbageSelection;
+
+//ATK option
+        if(menuPosition!=8)
+        {
+            switch(attackSelection)
+            {
+                case 1:
+                sprintf(debug_string," ATK:[*]");
+                break;
+
+                case 2:
+                sprintf(debug_string," ATK:[**]");
+                break;
+
+                case 3:
+                sprintf(debug_string," ATK:[***]");
+                break;             
+            }
+        }
+        else if(menuPosition==8)
+        {
+            switch(attackSelection)
+            {
+                case 1:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">ATK:[*]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," ATK:[*]");
+                break;
+
+                case 2:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">ATK:[**]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," ATK:[**]");
+                break;
+
+                case 3:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">ATK:[***]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," ATK:[***]");
+                break;   
+            }  
+        }
+
+        VDP_drawText(debug_string,optionsX+1,optionsBaseY+22);
+        P1.attackOption=attackSelection;
+
+//DEF option
+        if(menuPosition!=9)
+        {
+            switch(defenseSelection)
+            {
+                case 1:
+                sprintf(debug_string," DEF:[*]");
+                break;
+
+                case 2:
+                sprintf(debug_string," DEF:[**]");
+                break;
+
+                case 3:
+                sprintf(debug_string," DEF:[***]");
+                break;             
+            }
+        }
+        else if(menuPosition==9)
+        {
+            switch(defenseSelection)
+            {
+                case 1:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">DEF:[*]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," DEF:[*]");
+                break;
+
+                case 2:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">DEF:[**]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," DEF:[**]");
+                break;
+
+                case 3:
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">DEF:[***]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," DEF:[***]");
+                break;   
+            }  
+        }
+
+        VDP_drawText(debug_string,optionsX+1,optionsBaseY+24);
+        P1.defenseOption=defenseSelection;
+
+
+//CPU option
+        if(menuPosition!=10)
         {
             if(P2.AIplayer==true)sprintf(debug_string," CPU:[ON]");
             else if(P2.AIplayer==false)sprintf(debug_string," CPU:[OFF]");
         }
-        else if(menuPosition==6)
+        else if(menuPosition==10)
         {
             if(selectedArrowsToggleCounter==true)
             {
@@ -1588,11 +1813,11 @@ void startupOptionsMenu()
             }
         }
 
-        VDP_drawText(debug_string,optionsX+1,optionsBaseY+18);
+        VDP_drawText(debug_string,optionsX+1,optionsBaseY+26);
 
 //tell them to press start to leave
         sprintf(debug_string,"PRESS START");
-        VDP_drawText(debug_string,optionsX+0,optionsBaseY+24);  
+        VDP_drawText(debug_string,optionsX+0,optionsBaseY+28);  
     }
 
     setRandomSeed(GET_HVCOUNTER);//when leaving this menu system and starting the game
@@ -1628,10 +1853,12 @@ void drawCombosAndChains(Player* player)
 //temporary sprite animation for P1
     if(P1.chainAmount>1 && P1.flag_status<=fallingPiece)
     {
-        SPR_setVisibility(patrako_cheer,VISIBLE);
-        SPR_setVisibility(patrako_idle,HIDDEN);
-        SPR_setFrame(patrako_cheer,0);
-        patrako_is_cheering=true;
+        SPR_setVisibility(P1.avatarCheer,VISIBLE);
+        //SPR_setVisibility(patrako_cheer,VISIBLE);
+        SPR_setVisibility(P1.avatarIdle,HIDDEN);
+        SPR_setFrame(P1.avatarCheer,0);
+        //SPR_setFrame(patrako_cheer,0);
+        P1.avatarCheering=true;
         getTimer(33,true);//start a timer for this
     }
 }
