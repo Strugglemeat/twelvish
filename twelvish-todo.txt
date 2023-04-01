@@ -1,11 +1,10 @@
 fix clearing 4-way connector disappearing issue
 ===========
-two types of garbage:
+three types of garbage:
 1) touch match turn into same color (pbancho)
-2) touch match disappear
+2) touch match disappear (need to set this up in processDestroy(Player* player))
+3) regular pieces (that aren't matching when falling)
 =============
-using hold piece (start button) in conjunction with 2pcs dropping doesn't work properly
-==========
 make disappearing blink time get gradually faster
 set a baseline per player
 subtract 1000 each time
@@ -35,6 +34,17 @@ re-implement garbage system (debug: press A button to send)
 VS stuff:
 option set: ATK 1 thru 3 (stars), DEF 1 thru 3 stars
 using bit shifting, give chrs ~75%/100%/~125% attack (how many garbage sent) and defense (how much garbage received)
+
+DEF 1 star = ~125% garbage received multiplier
+DEF 2 stars = 100% garbage received multiplier
+DEF 3 stars = ~75% garbage received multiplier
+
+ATK 1 star = ~75% garbage sent multiplier
+ATK 2 stars = 100% garbage sent multiplier
+ATK 3 stars = ~125% garbage sent multiplier
+
+increase: value + (value >> 2)
+decrease: value - (value >> 2)
 ============
 set up pal3 to use 3 colors per tile type
 inner uses colors A & B, while updown, leftright, and 4piece corner all use colors C
@@ -46,10 +56,6 @@ piece preview 'TLS' using miniature indicators ala puyo puyo esports
 ~~~~~~~~~~~~
 damage incoming indicator below player playfield (at the very bottom)
 ~~~~~~~~~~~
-use shadow/highlight for the blinking disappearing pieces (the big 8x8 tile ONLY) - or maybe do it in more?
-~~~~~~~~~~~~
-fix the blinking in the field when clearing tiles
-~~~~~~~~~~~~
 start it with "ROUND 1 - FIGHT"
 *add win indicators to HUD
 *figure out how to properly center HUD (next preview piece might need to be made a sprite so it can be rendered off-center *OR* use two sections to render it)
@@ -69,13 +75,7 @@ MP modes
 *MIRROR: both players always get the same loadout. first round, random char+spell. after that, loser picks char+spell
 *FREE: prior to the match, players choose any attributes and 1 spell (no cost restrictions on spells)
 *PEACE: each player plays endless mode ala Pnickies
-====
+=========
 title screen: use kcowolf vert oscillation
 =========
-DEF 1 star = ~125% garbage received multiplier
-DEF 2 stars = 100% garbage received multiplier
-DEF 3 stars = ~75% garbage received multiplier
-
-ATK 1 star = ~75% garbage sent multiplier
-ATK 2 stars = 100% garbage sent multiplier
-ATK 3 stars = 125% garbage sent multiplier
+use shadow/highlight for the blinking disappearing pieces (the big 8x8 tile ONLY) - or maybe do it in more?

@@ -3,7 +3,7 @@ Dead Club
 
 
 chrs
-BENGIDA - a laughing, bouncing ball (flattened when loses)
+BENGIDA - 
 BISHIP - priest (has tall oversized bishop's hat - maybe just the hat with legs)
 BRIMSHAW - redneck inside a hot rod or huge wheel 4x4
 CONAMY - a nerd like Norimaro from msh vs sf ("Konami")
@@ -18,3 +18,5 @@ SEBRA - black & white horse person, kinda like sun wukong
 SWANMEAT - a super tanned swan with sunglasses that could be edible and/or a cool guy
 TAVUDER
 ZHADE - ninja ala mortal kombat smoke
+
+ORDU
