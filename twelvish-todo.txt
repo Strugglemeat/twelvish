@@ -1,9 +1,22 @@
+P1 dissolving garbage type A doesn't work (type B untested, type C not implemented to fall)
+=========
+change all options to be for both players (forced mirror matches for testing purposes)
+a couple settings still need to be set
+    P2.optionNumConnections=3;
+    P2.optionPiecesDropping=3;
+==============
 fix clearing 4-way connector disappearing issue
 ===========
+make AI send garbage
+========
+change MULU to bit shift when giving meter in processDestroy
+=========
+figure out how to properly set draw parameters after sending garbage, rather than setting entire board to be redrawn
+=========
 three types of garbage:
 1) touch match turn into same color (pbancho)
-2) touch match disappear (need to set this up in processDestroy(Player* player))
-3) regular pieces (that aren't matching when falling)
+2) touch match disappear (need to set this up in processDestroy(Player* player)) and in options/initialization
+3) regular pieces (that aren't matching when falling) -> needs to be implemented in processAttack
 =============
 make disappearing blink time get gradually faster
 set a baseline per player
@@ -13,24 +26,20 @@ using this big math might be suboptimal
 =========
 BUG: some sort of phantom matching at least at ground lvl when in 2match
 ======
+option: per-character meter max
+some people have a small max
+some people have a big max
+this also dictates what spells they can choose
+
+that also will dictate what spells they can choose since diff spells have different costs
+if someone has 30 meter max they can't pick a spell that costs 50 meter
+=======
 use a different set of 6 colors for each player
 ======
 check for ALL CLEAR        P1.flag_allClear
-=========
-implement hori rotation
-*manageFalling
-*pieceIntoBoard
-*handleInput
-
-use a LUT to determine the offsets of collisionTest
-if player->flag_flippedHorizontal==false, offsets are as now
-if player->flag_flippedHorizontal==true, offsets are all changed
 ========
 controls: fast drop and having more than 1 spell slot are mutually exclusive (due to UP arrow)
 =======
-re-implement garbage system (debug: press A button to send)
-*ai sends garbage
-=========
 VS stuff:
 option set: ATK 1 thru 3 (stars), DEF 1 thru 3 stars
 using bit shifting, give chrs ~75%/100%/~125% attack (how many garbage sent) and defense (how much garbage received)
@@ -79,3 +88,12 @@ MP modes
 title screen: use kcowolf vert oscillation
 =========
 use shadow/highlight for the blinking disappearing pieces (the big 8x8 tile ONLY) - or maybe do it in more?
+=========
+implement hori rotation
+*manageFalling
+*pieceIntoBoard
+*handleInput
+
+use a LUT to determine the offsets of collisionTest
+if player->flag_flippedHorizontal==false, offsets are as now
+if player->flag_flippedHorizontal==true, offsets are all changed
