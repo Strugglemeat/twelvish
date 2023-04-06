@@ -23,8 +23,11 @@ typedef struct {
     u16 spriteX;
     s16 spriteY;
     u8 xPosition,yPosition;
-
     u8 fallingIncrement;
+
+    bool flag_locking;
+    u8 lockingLateralCounter;
+    bool flag_hard_dropped;
 
 //input
     u8 moveDelay;
@@ -39,12 +42,6 @@ typedef struct {
     u8 leftright[16];
     u8 updown[7];
     u8 innerconnect[4][7][2];//are all of these necessary?
-
-    u8 damageToBeReceived;
-
-    bool flag_locking;
-    u8 lockingLateralCounter;
-    bool flag_hard_dropped;
 
 //matching
     u8 chainAmount;
@@ -84,11 +81,19 @@ typedef struct {
     bool avatarCheering;
     Sprite* avatarLost;
     Sprite* avatarCheer;
+    u8 cheerTimerNum;
 
 //COMBAT
     s8 attackOption;
     s8 defenseOption;
     s8 garbageOption;
+    s8 opponentGarbageOption;
+
+    s8 damageToBeReceived;
+    s8 meterAmount;
+
+//SPELLS
+    bool secondSpellSelected;
 
 } Player;
 
@@ -108,7 +113,10 @@ static void drawFallingSprite(Player* player);
 void drawFullTile(Player* player, u8 xPos, u8 yPos);
 void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY);
 void drawCombosAndChains(Player* player);
+void checkAvatarCheering(Player* player);
 void manageDrawing(Player* player);
+void drawWhichSpellSelected(Player* player);
+void drawMeterAmount(Player* player);
 
 void gameLogicSwitch(Player* player);
 
@@ -347,10 +355,13 @@ u8 globalSpawnCloudVisibilityTimer;//replace with SPR_getAnimationDone(sharedNex
 
 void initialize()
 {
+//TIMERS
     P1.fallLockingTimerNum=1;
     P2.fallLockingTimerNum=2;
     P1.blinkTimerNum=3;
     P2.blinkTimerNum=4;
+    P1.cheerTimerNum=5;
+    P2.cheerTimerNum=6;
 
 //temporary next cloud animation
     sharedNextSpawnCloud = SPR_addSpriteSafe(&cloud, -64, -64, TILE_ATTR(PAL0, TRUE, FALSE, FALSE));//TILE_ATTR(pal, prio, flipV, flipH)
@@ -422,6 +433,13 @@ void initialize()
     P2.optionDiagonalMatching=true;
 
     P2.optionPiecesDropping=3;
+
+    P1.opponentGarbageOption=P2.garbageOption;
+    P2.opponentGarbageOption=P1.garbageOption;
+
+//spells
+    P1.secondSpellSelected=false;
+    P2.secondSpellSelected=false;
 }
 
 static void drawFallingSprite(Player* player)
@@ -984,21 +1002,21 @@ void handleInput(Player* player, u16 buttons)
         }
 
 //UP
-        //if (buttons & BUTTON_UP && player->moveDelay<=1 && player->optionDropStyle>0 && player->flag_releasedUp==true)
         if (buttons & BUTTON_UP && player->optionDropStyle>0 && player->flag_releasedUp==true)
         {
-            /*
-            if(player->optionDropStyle==SONIC)effectFastDrop(player);
-            else if(player->yPosition>0)effectFastDrop(player);//slight delay for HARD DROP
-            */
             effectFastDrop(player);
             player->flag_releasedUp=false;
         }
         else if (!(buttons & BUTTON_UP))player->flag_releasedUp=true;
-    }
-    else if((collisionTest(player, BOTTOM)==TRUE) && (buttons & BUTTON_DOWN))
+    }//end of collisionTest bottom==false
+    else if((collisionTest(player, BOTTOM)==TRUE) && (buttons & BUTTON_DOWN))player->lockingLateralCounter=maxLaterals;//lock in
+
+//UP switch spell
+    if (buttons & BUTTON_UP && player->optionDropStyle==0 && player->flag_releasedUp==true)
     {
-        player->lockingLateralCounter=maxLaterals;//lock in
+        player->secondSpellSelected=!player->secondSpellSelected;
+        player->flag_releasedUp=false;
+        //KLog_U1("player spell selected: ",player->secondSpellSelected);
     }
 
 //B and C (cycling)
@@ -1008,14 +1026,14 @@ void handleInput(Player* player, u16 buttons)
     {
         if (buttons & BUTTON_C)
         {
-            doCycle(player, DOWN);
+            doCycle(player, UP);
             player->cycleDelay=CYCLE_DELAY_AMOUNT;
             player->flag_releasedCycle=false;
 
         }
         else if (buttons & BUTTON_B)
         {
-            doCycle(player, UP);
+            doCycle(player, DOWN);
             player->cycleDelay=CYCLE_DELAY_AMOUNT;
             player->flag_releasedCycle=false;
         }
@@ -1104,24 +1122,13 @@ void printDebug()
     VDP_drawText(debug_string,21,27);
 
     if(SYS_getCPULoad()>90)KLog_U2("CPU>90%, P1 status: ",P1.flag_status," P2 status: ",P2.flag_status);
-
-    if(P1.flag_status==toppedOut)
-    {
-        sprintf(debug_string,"TOPPED OUT");
-        VDP_drawText(debug_string,1,2);
-    }
-    if(P2.flag_status==toppedOut)
-    {
-        sprintf(debug_string,"TOPPED OUT");
-        VDP_drawText(debug_string,28,2);
-    }
-
-    drawCombosAndChains(&P1);//this needs to be restricted
-    drawCombosAndChains(&P2);
 }
 
 void gameOver()
 {
+    if(P1.flag_status==toppedOut)VDP_drawText("TOPPED OUT",1,2);
+    if(P2.flag_status==toppedOut)VDP_drawText("TOPPED OUT",28,2);
+
     SPR_setVisibility(sharedNextSpawnCloud,HIDDEN);
 
     SPR_releaseSprite(P1.avatarIdle);
@@ -1672,15 +1679,15 @@ void startupOptionsMenu()
             switch(garbageSelection)
             {
                 case 1:
-                sprintf(debug_string," GARB:[A]");
+                sprintf(debug_string," GARBAG:[A]");
                 break;
 
                 case 2:
-                sprintf(debug_string," GARB:[B]");
+                sprintf(debug_string," GARBAG:[B]");
                 break;
 
                 case 3:
-                sprintf(debug_string," GARB:[C]");
+                sprintf(debug_string," GARBAG:[C]");
                 break;             
             }
         }
@@ -1689,23 +1696,23 @@ void startupOptionsMenu()
             switch(garbageSelection)
             {
                 case 1:
-                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">GARB:[A]");
-                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," GARB:[A]");
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">GARBAG:[A]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," GARBAG:[A]");
                 break;
 
                 case 2:
-                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">GARB:[B]");
-                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," GARB:[B]");
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">GARBAG:[B]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," GARBAG:[B]");
                 break;
 
                 case 3:
-                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">GARB:[C]");
-                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," GARB:[C]");
+                if(selectedArrowsToggleCounter==true)sprintf(debug_string,">GARBAG:[C]");
+                else if(selectedArrowsToggleCounter!=true)sprintf(debug_string," GARBAG:[C]");
                 break;   
             }  
         }
 
-        VDP_drawText(debug_string,optionsX,optionsBaseY+20);
+        VDP_drawText(debug_string,optionsX-2,optionsBaseY+20);
         P1.garbageOption=garbageSelection;
 
 //ATK option
@@ -1826,40 +1833,41 @@ void startupOptionsMenu()
 void drawCombosAndChains(Player* player)
 {
     u8 xPosShiftP2=0;
-    if(player==&P2)xPosShiftP2=PLAYER2OFFSET;
+    if(player==&P2)xPosShiftP2=8;
+
+    #define xPosBase 13
+    #define yPosBase 9
 
     if(player->howManyMatched>player->optionNumConnections)
     {
         sprintf(debug_string,"COMBO:%d",player->howManyMatched);
-        VDP_drawText(debug_string,2+xPosShiftP2,1);
+        VDP_drawText(debug_string,xPosBase+xPosShiftP2,yPosBase);
     }
 
     if(player->chainAmount>1 && player->flag_status<=fallingPiece)
     {
         sprintf(debug_string,"CHAIN:%d",player->chainAmount);
-        VDP_drawText(debug_string,2+xPosShiftP2,2);
+        VDP_drawText(debug_string,xPosBase+xPosShiftP2,yPosBase+1);
     }
 
 //erasing
     if(player->flag_status>checkingMatches)
     {
         sprintf(debug_string,"        ");//this is to clear out the combo text
-        VDP_drawText(debug_string,2+xPosShiftP2,1);
+        VDP_drawText(debug_string,xPosBase+xPosShiftP2,yPosBase);
 
         sprintf(debug_string,"        ");//this is to clear out the chain text
-        VDP_drawText(debug_string,2+xPosShiftP2,2);
+        VDP_drawText(debug_string,xPosBase+xPosShiftP2,yPosBase+1);
     }
 
-//temporary sprite animation for P1
-    if(P1.chainAmount>1 && P1.flag_status<=fallingPiece)
+//sprite animation
+    if(player->chainAmount>1 && player->flag_status<=fallingPiece)
     {
-        SPR_setVisibility(P1.avatarCheer,VISIBLE);
-        //SPR_setVisibility(patrako_cheer,VISIBLE);
-        SPR_setVisibility(P1.avatarIdle,HIDDEN);
-        SPR_setFrame(P1.avatarCheer,0);
-        //SPR_setFrame(patrako_cheer,0);
-        P1.avatarCheering=true;
-        getTimer(33,true);//start a timer for this
+        SPR_setVisibility(player->avatarCheer,VISIBLE);
+        SPR_setVisibility(player->avatarIdle,HIDDEN);
+        SPR_setFrame(player->avatarCheer,0);
+        player->avatarCheering=true;
+        getTimer(player->cheerTimerNum,true);//start a timer
     }
 }
 
@@ -2123,22 +2131,36 @@ void processDestroy(Player* player)//we ONLY get here if we are destroying tiles
 
     for (u8 i=0;i<player->howManyMatched;i++)
     {
-//check the surrounding for garbage to be transformed
-        if(player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]==COLOR_GARBAGE){
-            player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
-            player->flag_status=checkingMatches;
+        //if(player->garbageOption==1)//this needs to be based on OPPONENT
+        if(player->opponentGarbageOption==1)
+        {
+            if(player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]==COLOR_GARBAGE){
+                player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
+                player->flag_status=checkingMatches;
+            }
+            if(player->board[player->matchedQueueX[i]][player->matchedQueueY[i]+1]==COLOR_GARBAGE){
+                player->board[player->matchedQueueX[i]][player->matchedQueueY[i]+1]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
+                player->flag_status=checkingMatches;
+            }
+            if(player->board[player->matchedQueueX[i]-1][player->matchedQueueY[i]]==COLOR_GARBAGE){
+                player->board[player->matchedQueueX[i]-1][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
+                player->flag_status=checkingMatches;
+            }
+            if(player->board[player->matchedQueueX[i]][player->matchedQueueY[i]-1]==COLOR_GARBAGE){
+                player->board[player->matchedQueueX[i]][player->matchedQueueY[i]-1]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
+                player->flag_status=checkingMatches;
+            }
         }
-        if(player->board[player->matchedQueueX[i]][player->matchedQueueY[i]+1]==COLOR_GARBAGE){
-            player->board[player->matchedQueueX[i]][player->matchedQueueY[i]+1]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
-            player->flag_status=checkingMatches;
-        }
-        if(player->board[player->matchedQueueX[i]-1][player->matchedQueueY[i]]==COLOR_GARBAGE){
-            player->board[player->matchedQueueX[i]-1][player->matchedQueueY[i]]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
-            player->flag_status=checkingMatches;
-        }
-        if(player->board[player->matchedQueueX[i]][player->matchedQueueY[i]-1]==COLOR_GARBAGE){
-            player->board[player->matchedQueueX[i]][player->matchedQueueY[i]-1]=player->board[player->matchedQueueX[i]][player->matchedQueueY[i]];
-            player->flag_status=checkingMatches;
+        //else if(player->garbageOption==2)//this needs to be based on OPPONENT
+        else if(player->opponentGarbageOption==2)
+        {
+            if(player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]==COLOR_GARBAGE)player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]=0;
+
+            if(player->board[player->matchedQueueX[i]][player->matchedQueueY[i]+1]==COLOR_GARBAGE)player->board[player->matchedQueueX[i]][player->matchedQueueY[i]+1]=0;
+
+            if(player->board[player->matchedQueueX[i]-1][player->matchedQueueY[i]]==COLOR_GARBAGE)player->board[player->matchedQueueX[i]-1][player->matchedQueueY[i]]=0;
+
+            if(player->board[player->matchedQueueX[i]][player->matchedQueueY[i]-1]==COLOR_GARBAGE)player->board[player->matchedQueueX[i]][player->matchedQueueY[i]-1]=0;
         }
 
         player->board[player->matchedQueueX[i]][player->matchedQueueY[i]]=0;
@@ -2241,6 +2263,95 @@ void manageDrawing(Player* player)
     if(player->flag_drawNext==true){
         drawPlayerNext(player);
         player->flag_drawNext=false;
+    }
+}
+
+void loadCharacter(Player* player)
+{
+    bool FlipP2=false;
+    s8 whichPalette=PAL1;//PAL1 = P1, PAL2 = P2
+    u8 spriteXpos=106;
+
+    if(player==&P2)
+    {
+        FlipP2=true;
+        whichPalette=PAL2;
+        spriteXpos=156;
+    }
+
+    switch(player->whichCharacter)
+    {
+        case 1://patrako
+        PAL_setPalette(whichPalette,patrakoIdle.palette->data,DMA);
+        player->avatarIdle = SPR_addSpriteSafe(&patrakoIdle, spriteXpos, 144, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        player->avatarCheer = SPR_addSpriteSafe(&patrakoCheer, spriteXpos, 130, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        break;
+
+        case 2://ken
+        PAL_setPalette(whichPalette,kenIdle.palette->data,DMA);
+        player->avatarIdle = SPR_addSpriteSafe(&kenIdle, spriteXpos, 136,TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        player->avatarCheer = SPR_addSpriteSafe(&kenCheer, spriteXpos, 130, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        break;
+
+        case 3://sakura
+        PAL_setPalette(whichPalette,sakuraIdle.palette->data,DMA);
+        player->avatarIdle = SPR_addSpriteSafe(&sakuraIdle, spriteXpos, 136,TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        player->avatarCheer = SPR_addSpriteSafe(&sakuraCheer, spriteXpos, 130, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        break;
+    }
+
+    if(player==&P1)
+    {
+        SPR_setVisibility(P1.avatarCheer,HIDDEN);
+        P1.avatarCheering=false;
+    }
+    else if(player==&P2)
+    {
+        SPR_setVisibility(P2.avatarCheer,HIDDEN);
+        P2.avatarCheering=false;        
+    }
+}
+
+void loadCharacterLost(Player* player)
+{
+    bool FlipP2=false;
+    s8 whichPalette=PAL1;//PAL1 = P1, PAL2 = P2
+    u8 spriteXpos=106;
+
+    if(player==&P2)
+    {
+        FlipP2=true;
+        whichPalette=PAL2;
+        spriteXpos=156;
+    }
+
+    switch(player->whichCharacter)
+    {
+        case 1://patrako
+        player->avatarLost = SPR_addSpriteSafe(&patrakoLost, spriteXpos,144, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        break;
+
+        case 2://ken
+        player->avatarLost = SPR_addSpriteSafe(&kenLost, spriteXpos,136, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        break;
+
+        case 3://sakura
+        player->avatarLost = SPR_addSpriteSafe(&sakuraLost, spriteXpos,152, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
+        break;
+    }
+
+}
+
+void checkAvatarCheering(Player* player)
+{
+    #define cheeringTimerAmount 62000
+
+    if(getTimer(player->cheerTimerNum,false)>=cheeringTimerAmount && player->avatarCheering==true)
+    {
+        SPR_setFrame(player->avatarIdle,0);
+        SPR_setVisibility(player->avatarCheer,HIDDEN);
+        SPR_setVisibility(player->avatarIdle,VISIBLE);
+        player->avatarCheering=false;
     }
 }
 

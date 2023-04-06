@@ -43,7 +43,6 @@ int main()
     //loadDebugFieldData();
 
     while(P1.flag_status!=toppedOut && P2.flag_status!=toppedOut)
-    //while(P1.flag_status!=toppedOut)
     {
         manageDelays();
 
@@ -61,14 +60,18 @@ int main()
 
         if(flag_sharedNextDraw==true)drawSharedNext();
 
-        if(getTimer(33,false)>=62000 && P1.avatarCheering==true)
-        {
-            SPR_setFrame(P1.avatarIdle,0);
-            SPR_setVisibility(P1.avatarCheer,HIDDEN);
-            SPR_setVisibility(P1.avatarIdle,VISIBLE);
-            P1.avatarCheering=false;
-        }
-        
+        checkAvatarCheering(&P1);//this needs to be restricted
+        checkAvatarCheering(&P2);
+
+        drawCombosAndChains(&P1);//this needs to be restricted
+        drawCombosAndChains(&P2);
+
+        drawWhichSpellSelected(&P1);
+        drawWhichSpellSelected(&P2);
+
+        drawMeterAmount(&P1);
+        drawMeterAmount(&P2);
+
         SPR_update();
 
         printDebug();
@@ -233,78 +236,22 @@ void printBoard(Player* player, u8 startX, u8 startY, u8 endX, u8 endY)//from le
     //if(player==&P1)KLog_U3("~tileIncrementer end:",tileIncrementer,", actualDrawnTiles:",debug_actualDrawnTiles," diff:",(tileIncrementer-debug_actualDrawnTiles));
 }
 
-void loadCharacter(Player* player)
+void drawWhichSpellSelected(Player* player)
 {
-    bool FlipP2=false;
-    s8 whichPalette=PAL1;//PAL1 = P1, PAL2 = P2
-    u8 spriteXpos=106;
+    s8 xPosShiftP2=0;
+    if(player==&P2)xPosShiftP2=PLAYER2OFFSET;
 
-    if(player==&P2)
-    {
-        FlipP2=true;
-        whichPalette=PAL2;
-        spriteXpos=156;
-    }
+    if(player->secondSpellSelected==false)sprintf(debug_string,"SPELL A");
+    else sprintf(debug_string,"SPELL B");
 
-    switch(player->whichCharacter)
-    {
-        case 1://patrako
-        PAL_setPalette(whichPalette,patrakoIdle.palette->data,DMA);
-        player->avatarIdle = SPR_addSpriteSafe(&patrakoIdle, spriteXpos, 144, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
-        player->avatarCheer = SPR_addSpriteSafe(&patrakoCheer, spriteXpos, 130, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
-        break;
-
-        case 2://ken
-        PAL_setPalette(whichPalette,kenIdle.palette->data,DMA);
-        player->avatarIdle = SPR_addSpriteSafe(&kenIdle, spriteXpos, 136,TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
-        player->avatarCheer = SPR_addSpriteSafe(&kenCheer, spriteXpos, 130, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
-        break;
-
-        case 3://sakura
-        PAL_setPalette(whichPalette,sakuraIdle.palette->data,DMA);
-        player->avatarIdle = SPR_addSpriteSafe(&sakuraIdle, spriteXpos, 136,TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
-        player->avatarCheer = SPR_addSpriteSafe(&sakuraCheer, spriteXpos, 130, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
-        break;
-    }
-
-    if(player==&P1)
-    {
-        SPR_setVisibility(P1.avatarCheer,HIDDEN);
-        P1.avatarCheering=false;
-    }
-    else if(player==&P2)
-    {
-        SPR_setVisibility(P2.avatarCheer,HIDDEN);
-        P2.avatarCheering=false;        
-    }
+    VDP_drawText(debug_string,2+xPosShiftP2,2);
 }
 
-void loadCharacterLost(Player* player)
+void drawMeterAmount(Player* player)
 {
-    bool FlipP2=false;
-    s8 whichPalette=PAL1;//PAL1 = P1, PAL2 = P2
-    u8 spriteXpos=106;
+    s8 xPosShiftP2=0;
+    if(player==&P2)xPosShiftP2=PLAYER2OFFSET;
 
-    if(player==&P2)
-    {
-        FlipP2=true;
-        whichPalette=PAL2;
-        spriteXpos=156;
-    }
-
-    switch(player->whichCharacter)
-    {
-        case 1://patrako
-        player->avatarLost = SPR_addSpriteSafe(&patrakoLost, spriteXpos,144, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
-        break;
-
-        case 2://ken
-        player->avatarLost = SPR_addSpriteSafe(&kenLost, spriteXpos,136, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
-        break;
-
-        case 3://sakura
-        player->avatarLost = SPR_addSpriteSafe(&sakuraLost, spriteXpos,152, TILE_ATTR(whichPalette, TRUE, FALSE, FlipP2));
-        break;
-    }
-
+    sprintf(debug_string,"METER:%d",player->meterAmount);
+    VDP_drawText(debug_string,2+xPosShiftP2,1);
 }
