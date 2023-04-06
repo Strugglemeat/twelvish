@@ -5,14 +5,8 @@
 
 typedef struct {
     u8 board[9][18];//7 wide by 16 tall. [0][0] not used. array is [9] because [8] gets fucky with the inner tiles
-    u8 matchedQueueX[maxX*maxY];
-    u8 matchedQueueY[maxX*maxY];
 
     u8 flag_status;
-    bool flag_redraw;
-    bool flag_drawNext;
-
-    bool flag_allClear;
 
     u8 blinkTimes;
     u8 blinkingSave[9][18];
@@ -35,24 +29,29 @@ typedef struct {
     bool flag_releasedCycle;
     bool flag_releasedStart;
     bool flag_releasedUp;
+    bool flag_releasedA;
 
-//drawing
+//DRAWING
     u8 drawStartX,drawStartY,drawEndX,drawEndY;
-
     u8 leftright[16];
     u8 updown[7];
-    u8 innerconnect[4][7][2];//are all of these necessary?
+    u8 innerconnect[1][1];//removing this messes up chains, for some reason
+    bool flag_redraw;
+    bool flag_drawNext;
 
 //matching
     u8 chainAmount;
     u8 howManyMatched;//uses matchedQueue
+    u8 matchedQueueX[maxX*maxY];
+    u8 matchedQueueY[maxX*maxY];
+    bool flag_allClear;
 
 //AI
     bool AIplayer;
     bool AIspawnCalc;
     u8 AIcolumnview[maxX+1];
 
-//options
+//OPTIONS
     u8 optionDropStyle;
     u8 optionNumColors;
     u8 optionStartButton;
@@ -60,7 +59,7 @@ typedef struct {
     bool optionDiagonalMatching;
     u8 optionPiecesDropping;
 
-//timers
+//TIMERS
     u8 blinkTimerNum;
     u8 fallLockingTimerNum;
 
@@ -91,6 +90,7 @@ typedef struct {
 
     s8 damageToBeReceived;
     s8 meterAmount;
+    s8 maximumMeterAmount;
 
 //SPELLS
     bool secondSpellSelected;
@@ -138,8 +138,6 @@ void effectFastDrop(Player* player);
 void manageFalling(Player* player);
 void pieceIntoBoard(Player* player);
 
-void sendDamage(Player* player, u8 amountDamageTaken);
-
 void processDestroy(Player* player);
 void blinkMatches(Player* player);
 
@@ -152,6 +150,9 @@ static u16 updownLUT(u16 section);
 static bool updownLUTflag(u16 section);
 static u16 leftrightLUT(u16 section);
 static bool leftrightLUTflag(u16 section);
+
+void sendAttack(Player* player, u8 attackAmount);
+void processAttack(Player* player);
 
 u8 sharedNext[fallingPieceNumberOfTiles];
 bool flag_sharedNextDraw;
@@ -376,6 +377,37 @@ void initialize()
     clearBoardData(&P1);
     clearBoardData(&P2);
 
+    if(P2.AIplayer==true)//set in options menu
+    {
+        P2.AIspawnCalc=true;
+        for(u8 i=0;i<maxX+1;i++)P2.AIcolumnview[i]=16;
+    }
+
+//options
+    P2.optionNumConnections=3;
+    P2.optionPiecesDropping=3;
+
+    //P2.optionNumConnections=P1.optionNumConnections;
+    //P2.optionPiecesDropping=P1.optionPiecesDropping;
+
+    P2.optionDiagonalMatching=P1.optionDiagonalMatching;
+    P2.optionNumColors=P1.optionNumColors;
+    P1.maximumMeterAmount=99;
+    P2.maximumMeterAmount=P1.maximumMeterAmount;
+    P2.optionDropStyle=P1.optionDropStyle;
+    P2.optionStartButton=P1.optionStartButton;
+
+//combat & debuffs
+    P1.opponentGarbageOption=P2.garbageOption;
+    P2.opponentGarbageOption=P1.garbageOption;
+    P1.flag_allowed_to_swap=true;
+    P2.flag_allowed_to_swap=true;
+
+//spells initialization
+    P1.secondSpellSelected=false;
+    P2.secondSpellSelected=false;
+
+//piece
     u8 initialDroppedPiece[fallingPieceNumberOfTiles];
 
     for (u8 createIndex=0;createIndex<fallingPieceNumberOfTiles;createIndex++)
@@ -410,36 +442,14 @@ void initialize()
     P1.flag_releasedUp=true;
     P2.flag_releasedUp=true;
 
+    P1.flag_releasedA=true;
+    P2.flag_releasedA=true;
+
     P1.blinkTimes=0;
     P2.blinkTimes=0;
 
     P1.flag_allClear=false;
     P2.flag_allClear=false;
-
-    if(P2.AIplayer==true)//set in options menu
-    {
-        P2.AIspawnCalc=true;
-        for(u8 i=0;i<maxX+1;i++)P2.AIcolumnview[i]=16;
-    }
-
-//options
-    P1.flag_allowed_to_swap=true;
-    P2.flag_allowed_to_swap=true;
-
-    P2.optionNumColors=globalNumColors;
-
-    P2.optionNumConnections=3;
-
-    P2.optionDiagonalMatching=true;
-
-    P2.optionPiecesDropping=3;
-
-    P1.opponentGarbageOption=P2.garbageOption;
-    P2.opponentGarbageOption=P1.garbageOption;
-
-//spells
-    P1.secondSpellSelected=false;
-    P2.secondSpellSelected=false;
 }
 
 static void drawFallingSprite(Player* player)
@@ -828,6 +838,10 @@ void checkMatches(Player* player)
             player->flag_status=toppedOut;
             return;
         }
+        if(player->damageToBeReceived>0)
+        {
+            processAttack(player);//process incoming attack damage if we locked in and had no match
+        }
         else player->flag_status=spawningPiece;
     }
     //if(player==&P1)KLog_U1("()()()howManyMatched: ",player->howManyMatched);
@@ -936,7 +950,7 @@ void processGravity(Player* player)
 
     if(howMuchGravity>0)
     {
-        if(player==&P1)KLog_U2("^^processGravity updated drawStartY, from ",player->drawStartY," to ",player->drawStartY-1);
+        //if(player==&P1)KLog_U2("^^processGravity updated drawStartY, from ",player->drawStartY," to ",player->drawStartY-1);
         player->drawStartY--;
 
         player->flag_redraw=true;
@@ -1041,6 +1055,19 @@ void handleInput(Player* player, u16 buttons)
 
     if(player->optionStartButton>0)
     {
+
+//A button attack - tap to send garbage, hold to cast spell
+    if(!(buttons & BUTTON_A))player->flag_releasedA=true;
+
+   if(player->flag_releasedA==true && player->meterAmount>=2)
+    {
+        if (buttons & BUTTON_A)
+        {
+            sendAttack(player, player->meterAmount);//who sent it, how much they sent
+            player->meterAmount=0;
+            player->flag_releasedA=false;
+        }
+    }
 
 //DISCARD-SKIP with start button
         if((buttons & BUTTON_START) && player->flag_releasedStart==true && player->optionStartButton==SKIP && player->flag_allowed_to_swap==true)
@@ -1952,12 +1979,24 @@ void processAI()
                 P2.flag_releasedCycle=false;               
             }
         }
-    }
-
-    if(P2.flag_status==checkingMatches)
+    }//end of flag_status==fallingPiece
+    else if(P2.flag_status==checkingMatches)
     {
         P2.AIspawnCalc=true;
         AIdirection=0;
+    }
+
+//AI send garbage
+    u8 randomValue=randomRange(0,3);
+    if(randomValue==1 && P2.meterAmount>5)
+    {
+        sendAttack(&P2, P2.meterAmount);//who sent it, how much they sent
+        P2.meterAmount=0;
+    }
+    else if(randomValue>1 && P2.meterAmount>10)
+    {
+        sendAttack(&P2, P2.meterAmount);//who sent it, how much they sent
+        P2.meterAmount=0;
     }
 }
 
@@ -2031,7 +2070,7 @@ void blinkMatches(Player* player)
     //KLog("$^^blinkMatches!!!");
     if(player->blinkTimes==0)//initialization
     {
-        //KLog("^^blinkmatches set draw parameters to FULL BOARD");
+        //KLog("^^blinkmatches set draw to FULL BOARD");
         player->drawStartX=maxX;
         player->drawEndX=1;
         player->drawStartY=maxY;
@@ -2126,12 +2165,19 @@ void blinkMatches(Player* player)
 
 void processDestroy(Player* player)//we ONLY get here if we are destroying tiles
 {
-    if(player==&P1)KLog("********P1 processDestroy just started");
+    //if(player==&P1)KLog("********P1 processDestroy just started");
     player->chainAmount++;
 
+//HANDLE PLAYER METER INCREASE
+    if(player->chainAmount==1)player->meterAmount+=(1+(player->howManyMatched-player->optionNumConnections));
+    else if(player->chainAmount>1)player->meterAmount+=(1+(player->howManyMatched-player->optionNumConnections))*player->chainAmount;
+    //above is 1 plus combo amount above base times chain amount
+
+    if(player->meterAmount>player->maximumMeterAmount)player->meterAmount=player->maximumMeterAmount;
+
+//HANDLE GARBAGE AND PIECE DESTRUCTION
     for (u8 i=0;i<player->howManyMatched;i++)
     {
-        //if(player->garbageOption==1)//this needs to be based on OPPONENT
         if(player->opponentGarbageOption==1)
         {
             if(player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]==COLOR_GARBAGE){
@@ -2151,7 +2197,6 @@ void processDestroy(Player* player)//we ONLY get here if we are destroying tiles
                 player->flag_status=checkingMatches;
             }
         }
-        //else if(player->garbageOption==2)//this needs to be based on OPPONENT
         else if(player->opponentGarbageOption==2)
         {
             if(player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]==COLOR_GARBAGE)player->board[player->matchedQueueX[i]+1][player->matchedQueueY[i]]=0;
@@ -2355,24 +2400,50 @@ void checkAvatarCheering(Player* player)
     }
 }
 
-/*
-void sendDamage(Player* player, u8 amountDamageTaken)
+void sendAttack(Player* player, u8 attackAmount)//who sent it, how much they sent
 {
-    u8 sendingX=1;
-    u8 sendingY=0;
+//first step, divide attackAmount by two, since every 2 pts of damage = 1 pt of garbage
+    attackAmount=attackAmount>>1;
 
-    for(u8 damageAmount=0;damageAmount<amountDamageTaken;damageAmount++)
+//todo: handle player->attackOption inc or dec
+
+    if(player==&P1)
     {
-        player->board[sendingX][sendingY]=6;
-        sendingX++;
-        if(sendingX>7)
+        P2.damageToBeReceived=attackAmount;
+        KLog_U1("P2 damage to be received is: ",attackAmount);
+    }
+    else if(player==&P2)
+    {
+        P1.damageToBeReceived=attackAmount;
+    }
+}
+
+void processAttack(Player* player)
+{
+    KLog_U1("processing attack of ",player->damageToBeReceived);
+    u8 garbageDropX=1;
+    u8 garbageDropY=0;
+
+    for (u8 garbageReceived=player->damageToBeReceived;garbageReceived>0;garbageReceived--)
+    {
+        player->board[garbageDropX][garbageDropY]=6;
+        KLog_U2("garbage dropped at X:",garbageDropX," Y:",garbageDropY);
+
+        garbageDropX++;
+        if(garbageDropX>7)
             {
-                sendingX=1;
-                sendingY++;
+                garbageDropX=1;
+                garbageDropY++;
             }
     }
-    player->damageToBeReceived-=amountDamageTaken;
 
-    processGravity(player);
+    player->damageToBeReceived=0;
+    player->flag_redraw=true;
+    player->flag_status=doingGravity;
+    
+    //for now we will redraw the entire board for a player when garbage is coming
+    player->drawStartX=1;
+    player->drawStartY=1;
+    player->drawEndX=maxX+1;
+    player->drawEndY=maxY+1;
 }
-*/

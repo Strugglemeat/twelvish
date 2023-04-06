@@ -252,6 +252,6 @@ void drawMeterAmount(Player* player)
     s8 xPosShiftP2=0;
     if(player==&P2)xPosShiftP2=PLAYER2OFFSET;
 
-    sprintf(debug_string,"METER:%d",player->meterAmount);
+    sprintf(debug_string,"METER:%d ",player->meterAmount);
     VDP_drawText(debug_string,2+xPosShiftP2,1);
 }
